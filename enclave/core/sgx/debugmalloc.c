@@ -13,7 +13,6 @@
 #include <openenclave/internal/thread.h>
 #include <openenclave/internal/types.h>
 #include <openenclave/internal/utils.h>
-#include "../3rdparty/dlmalloc/dlmalloc/malloc.h"
 
 #if defined(OE_USE_DEBUG_MALLOC)
 
