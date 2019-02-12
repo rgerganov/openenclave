@@ -19,6 +19,7 @@ if (OE_SGX)
         sgx/init.c
         sgx/jump.c
         sgx/keys.c
+        sgx/link.c
         sgx/malloc.c
         sgx/memory.c
         sgx/once.c
