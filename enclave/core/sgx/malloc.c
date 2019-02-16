@@ -7,7 +7,7 @@
 
 /* Wrappers below need to set errno */
 #define OE_NEED_STDC_NAMES
-#include <openenclave/corelibc/errno.h>        // For errno & error defs
+#include <openenclave/corelibc/errno.h> // For errno & error defs
 
 /* Choose release mode or debug mode allocation functions */
 #if defined(OE_USE_DEBUG_MALLOC)

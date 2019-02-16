@@ -4,7 +4,7 @@
 add_library(oealloc STATIC allocator.c)
 
 target_include_directories(oealloc PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/include/openenclave/corelibc
     ${PROJECT_SOURCE_DIR}/include)
 
 target_compile_options(oealloc PUBLIC -fPIC -nostdinc -fno-stack-protector)

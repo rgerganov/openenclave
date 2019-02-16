@@ -1,9 +1,18 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
+#include <openenclave/corelibc/stdio.h>
+#include <openenclave/corelibc/string.h>
+#include <openenclave/corelibc/unistd.h>
 #include <openenclave/enclave.h>
 #include <openenclave/internal/allocator.h>
-#include <openenclave/internal/enclavelibc.h>
+#include <openenclave/internal/defs.h>
+
+/* The use of dlmalloc/malloc.c below requires stdc names from these headers */
+#define OE_NEED_STDC_NAMES
+#include <openenclave/corelibc/bits/stdfile.h> // For stderr & FILE
+#include <openenclave/corelibc/errno.h>        // For errno & error defs
+#include <openenclave/corelibc/sched.h>        // For sched_yield
 
 #define HAVE_MMAP 0
 #define LACKS_UNISTD_H
@@ -16,11 +25,7 @@
 #define LACKS_STDLIB_H
 #define LACKS_STRING_H
 #define USE_LOCKS 1
-#define memset oe_memset
-#define memcpy oe_memcpy
 #define fprintf _dlmalloc_stats_fprintf
-
-typedef struct _FILE FILE;
 
 static int _dlmalloc_stats_fprintf(FILE* stream, const char* format, ...);
 
@@ -129,7 +134,7 @@ int oe_dlmalloc_allocator_get_stats(oe_allocator_stats_t* stats)
     static MLOCK_T _lock = 0;
 
     if (stats)
-        oe_memset(stats, 0, sizeof(oe_allocator_stats_t));
+        memset(stats, 0, sizeof(oe_allocator_stats_t));
 
     ACQUIRE_LOCK(&_lock);
 
