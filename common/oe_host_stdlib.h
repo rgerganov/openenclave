@@ -9,6 +9,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(_WIN32)
+#include <errno.h>
+#include <openenclave/internal/utils.h>
+#include "../host/memalign.h"
+#endif
+
 OE_EXTERNC_BEGIN
 
 OE_INLINE
@@ -45,7 +51,20 @@ void* oe_realloc(void* ptr, size_t size)
 OE_INLINE
 int oe_posix_memalign(void** memptr, size_t alignment, size_t size)
 {
+#if defined(_WIN32)
+    if (!memptr)
+        return EINVAL;
+
+    if (!oe_is_ptrsize_multiple(alignment) || !oe_is_pow2(alignment))
+        return EINVAL;
+
+    if (!(*memptr = oe_memalign(alignment, size)))
+        return ENOMEM;
+
+    return 0;
+#else
     return posix_memalign(memptr, alignment, size);
+#endif
 }
 
 OE_INLINE

@@ -53,6 +53,8 @@ int oe_strerror_r(int errnum, char* buf, size_t buflen)
      */
     strerror_r(errnum, buf, buflen);
     return 0;
+#elif defined(_WIN32)
+    return strerror_s(buf, buflen, errnum);
 #else
     return strerror_r(errnum, buf, buflen);
 #endif

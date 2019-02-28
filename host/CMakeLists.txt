@@ -151,9 +151,9 @@ if (USE_LIBSGX)
 
   elseif (WIN32)
 
-    find_library(LIBSGX_COMMON NAMES sgx_enclave_common 
+    find_library(LIBSGX_COMMON NAMES sgx_enclave_common
       PATHS ${CMAKE_SOURCE_DIR}/prereqs/nuget/EnclaveCommonAPI.1.0.100.0/lib/native/x64-Release)
-    find_library(LIBSGX_QE NAMES sgx_dcap_ql 
+    find_library(LIBSGX_QE NAMES sgx_dcap_ql
       PATHS ${CMAKE_SOURCE_DIR}/prereqs/nuget/DCAP_Components.1.0.100.0/lib/native/Libraries)
     if (NOT LIBSGX_COMMON OR NOT LIBSGX_QE)
       message(FATAL_ERROR "No SGX libraries found, aborting! Set -DUSE_LIBSGX=OFF to ignore.")
