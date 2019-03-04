@@ -3,10 +3,20 @@
 
 set(DATA_DIR "../data")
 
+# OS-specific source files
 if (UNIX)
+  set(PLATFORM_SRC
+    ../../../common/sgx/rand.S)
+elseif (WIN32)
+  set(PLATFORM_SRC
+    ../../../common/sgx/rand.asm)
+else()
+  message(FATAL_ERROR "Unknown OS. Only supported OSes are Linux and Windows")
+endif()
+
 add_executable(hostcrypto
+    ${PLATFORM_SRC}
     main.c
-    ../../../common/sgx/rand.S
     ../read_file.c
     ../asn1_tests.c
     ../crl_tests.c
@@ -135,16 +145,6 @@ COMMAND openssl rsa -in ${DATA_DIR}/Leaf.key.pem -pubout -out ${DATA_DIR}/Leaf_p
 # Generate the hash Signature from Private key
 COMMAND openssl dgst -sha256 -sign ${DATA_DIR}/Leaf.key.pem -out ${DATA_DIR}/test_rsa_signature ${DATA_DIR}/test_sign_alphabet.txt
 )
-else()
-add_executable(hostcrypto
-    main.c
-    ../hash.c
-    ../hmac_tests.c
-    ../kdf_tests.c
-    ../sha_tests.c
-    ../tests.c
-    ../utils.c)
-endif()
 
 target_link_libraries(hostcrypto oehost)
 add_test(tests/crypto/host hostcrypto)

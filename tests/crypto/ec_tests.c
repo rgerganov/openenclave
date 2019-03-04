@@ -22,6 +22,10 @@
 #include "tests.h"
 #include "utils.h"
 
+/* Forward declarations for OS-agnostic memalign */
+void oe_memalign_free(void* ptr);
+void* oe_memalign(size_t alignment, size_t size);
+
 /* _CERT use as a ec_cert_with_ext.pem
  * _SGX_CERT use as a ec_cert_crl_distribution.pem
  * _CERT_WITHOUT_EXTENSIONS use as a Leafec.crt.pem
@@ -874,7 +878,17 @@ static void _test_crl_distribution_points(void)
     OE_TEST(r == OE_BUFFER_TOO_SMALL);
 
     {
-        OE_ALIGNED(8) uint8_t buffer[buffer_size];
+        uint8_t* buffer = (uint8_t*)oe_memalign(8, buffer_size);
+        if (!buffer)
+        {
+            OE_PRINT(
+                STDERR,
+                "Out of memory error: %s(%u): %s\n",
+                __FILE__,
+                __LINE__,
+                __FUNCTION__);
+            OE_ABORT();
+        }
 
         r = oe_get_crl_distribution_points(
             &cert, &urls, &num_urls, buffer, &buffer_size);
@@ -885,6 +899,7 @@ static void _test_crl_distribution_points(void)
         OE_TEST(strcmp(urls[0], _URL) == 0);
 
         printf("URL{%s}\n", urls[0]);
+        oe_memalign_free(buffer);
 
         OE_TEST(r == OE_OK);
     }
