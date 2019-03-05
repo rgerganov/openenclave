@@ -170,7 +170,7 @@ static void _test_mixed_chain()
 
     /* Chain does not contain a root for this certificate */
     r = oe_cert_chain_read_pem(&chain, MIXED_CHAIN, strlen(MIXED_CHAIN) + 1);
-    OE_TEST(r == OE_FAILURE);
+    OE_TEST(r == OE_CRYPTO_ERROR);
 
     oe_cert_free(&cert);
     oe_cert_chain_free(&chain);

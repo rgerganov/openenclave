@@ -107,7 +107,7 @@ void test_cert_chain_negative(
     // Missing cert in chain.
     OE_TEST(
         create_and_read_chain(std::vector<const char*>{leaf, root}, &chain) ==
-        OE_FAILURE);
+        OE_CRYPTO_ERROR);
 
     // Missing cert in chain.
     // Specifically root is missing.
