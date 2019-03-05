@@ -3,27 +3,12 @@
 
 #include "../rsa.h"
 #include "bcrypt.h"
+#include "key.h"
 
 #include <openenclave/bits/safecrt.h>
 #include <openenclave/internal/raise.h>
 #include <openenclave/internal/rsa.h>
 #include <openenclave/internal/utils.h>
-
-/*
- * Note that these structures were copied from the linux crypto/key.h file.
- * They can be consolidated once more crypto code is ported to Windows.
- */
-typedef struct oe_private_key_t
-{
-    uint64_t magic;
-    BCRYPT_KEY_HANDLE pkey;
-} oe_private_key_t;
-
-typedef struct oe_public_key_t
-{
-    uint64_t magic;
-    BCRYPT_KEY_HANDLE pkey;
-} oe_public_key_t;
 
 /*
  * Magic numbers for the RSA key implementation structures. These values
@@ -36,80 +21,68 @@ static const uint64_t _PUBLIC_KEY_MAGIC = 0x8f8f72170025426d;
 OE_STATIC_ASSERT(sizeof(oe_public_key_t) <= sizeof(oe_rsa_public_key_t));
 OE_STATIC_ASSERT(sizeof(oe_private_key_t) <= sizeof(oe_rsa_private_key_t));
 
-/*
- * These *key_is_valid functions are copied from the linux crypto/key.c. These
- * can be consolidated once more crypto code is ported to Windows.
- */
-bool oe_private_key_is_valid(const oe_private_key_t* impl)
-{
-    return impl && impl->magic == _PRIVATE_KEY_MAGIC && impl->pkey;
-}
+static const oe_bcrypt_read_key_args_t _PRIVATE_RSA_KEY_ARGS = {
+    CNG_RSA_PRIVATE_KEY_BLOB,
+    BCRYPT_RSA_ALG_HANDLE,
+    BCRYPT_RSAPRIVATE_BLOB};
 
-bool oe_public_key_is_valid(const oe_public_key_t* impl)
-{
-    return impl && impl->magic == _PUBLIC_KEY_MAGIC && impl->pkey;
-}
+// static const oe_bcrypt_read_key_args_t _PUBLIC_RSA_KEY_ARGS = {
+//    CNG_RSA_PUBLIC_KEY_BLOB,
+//    BCRYPT_RSA_ALG_HANDLE,
+//    BCRYPT_RSAPUBLIC_BLOB};
 
-static oe_result_t _rsa_pem_to_der(
-    const uint8_t* pem_data,
-    size_t pem_size,
-    uint8_t** der_data,
-    DWORD* der_size)
+static oe_result_t _get_public_rsa_blob_info(
+    BCRYPT_KEY_HANDLE key,
+    uint8_t** buffer,
+    ULONG* buffer_size)
 {
     oe_result_t result = OE_UNEXPECTED;
-    uint8_t* der_local = NULL;
-    DWORD der_local_size = 0;
-    BOOL success;
+    NTSTATUS status;
+    uint8_t* buffer_local = NULL;
+    ULONG buffer_local_size = 0;
+    BCRYPT_RSAKEY_BLOB* key_header;
 
-    if (!pem_data || !der_data | !der_size)
+    if (!key || !buffer || !buffer_size)
         OE_RAISE(OE_INVALID_PARAMETER);
 
-    if (pem_size == 0 || pem_size > MAXDWORD)
-        OE_RAISE(OE_INVALID_PARAMETER);
+    status = BCryptExportKey(
+        key, NULL, BCRYPT_RSAPUBLIC_BLOB, NULL, 0, &buffer_local_size, 0);
 
-    /* Subtract 1, since BCrypt doesn't count the null terminator.*/
-    pem_size--;
-
-    success = CryptStringToBinaryA(
-        (const char*)pem_data,
-        (DWORD)pem_size,
-        CRYPT_STRING_BASE64HEADER,
-        NULL,
-        &der_local_size,
-        NULL,
-        NULL);
-
-    /* With a null buffer, CryptStringToA returns true and sets the size. */
-    if (!success)
+    if (!BCRYPT_SUCCESS(status))
         OE_RAISE(OE_CRYPTO_ERROR);
 
-    der_local = (uint8_t*)malloc(der_local_size);
-    if (der_local == NULL)
+    buffer_local = (uint8_t*)malloc(buffer_local_size);
+    if (buffer_local == NULL)
         OE_RAISE(OE_OUT_OF_MEMORY);
 
-    success = CryptStringToBinaryA(
-        (const char*)pem_data,
-        (DWORD)pem_size,
-        CRYPT_STRING_BASE64HEADER,
-        der_local,
-        &der_local_size,
+    status = BCryptExportKey(
+        key,
         NULL,
-        NULL);
+        BCRYPT_RSAPUBLIC_BLOB,
+        buffer_local,
+        buffer_local_size,
+        &buffer_local_size,
+        0);
 
-    if (!success)
+    if (!BCRYPT_SUCCESS(status))
         OE_RAISE(OE_CRYPTO_ERROR);
 
-    *der_data = der_local;
-    *der_size = der_local_size;
+    /* Sanity check to ensure we get modulus and public exponent. */
+    key_header = (BCRYPT_RSAKEY_BLOB*)buffer_local;
+    if (key_header->cbPublicExp == 0 || key_header->cbModulus == 0)
+        OE_RAISE(OE_FAILURE);
+
+    *buffer = buffer_local;
+    *buffer_size = buffer_local_size;
+    buffer_local = NULL;
     result = OE_OK;
-    der_local = NULL;
 
 done:
-    if (der_local)
+    if (buffer_local)
     {
-        oe_secure_zero_fill(der_local, der_local_size);
-        free(der_local);
-        der_local_size = 0;
+        oe_secure_zero_fill(buffer_local, buffer_local_size);
+        free(buffer_local);
+        buffer_local_size = 0;
     }
 
     return result;
@@ -120,109 +93,66 @@ oe_result_t oe_rsa_private_key_read_pem(
     const uint8_t* pem_data,
     size_t pem_size)
 {
-    oe_result_t result = OE_UNEXPECTED;
-    uint8_t* der_data = NULL;
-    DWORD der_size = 0;
-    uint8_t* rsa_blob = NULL;
-    DWORD rsa_blob_size = 0;
-    BCRYPT_KEY_HANDLE handle = NULL;
+    return oe_bcrypt_read_key_pem(
+        pem_data,
+        pem_size,
+        private_key,
+        _PRIVATE_RSA_KEY_ARGS,
+        _PRIVATE_KEY_MAGIC);
+}
 
-    if (!private_key || !pem_data)
-        OE_RAISE(OE_INVALID_PARAMETER);
+/* Used by tests/crypto/ec_tests */
+oe_result_t oe_rsa_private_key_write_pem(
+    const oe_rsa_private_key_t* private_key,
+    uint8_t* pem_data,
+    size_t* pem_size)
+{
+    return OE_UNSUPPORTED;
+    //    return oe_private_key_write_pem(
+    //        (const oe_private_key_t*)private_key,
+    //        pem_data,
+    //        pem_size,
+    //        _private_key_write_pem_callback,
+    //        _PRIVATE_KEY_MAGIC);
+}
 
-    /* Step 1: Convert PEM to DER. */
-    OE_CHECK(_rsa_pem_to_der(pem_data, pem_size, &der_data, &der_size));
+/* Used by tests/crypto/rsa_tests */
+oe_result_t oe_rsa_public_key_read_pem(
+    oe_rsa_public_key_t* public_key,
+    const uint8_t* pem_data,
+    size_t pem_size)
+{
+    return OE_UNSUPPORTED;
+    //    return oe_public_key_read_pem(
+    //        pem_data,
+    //        pem_size,
+    //        (oe_public_key_t*)public_key,
+    //        EVP_PKEY_RSA,
+    //        _PUBLIC_KEY_MAGIC);
+}
 
-    /* Step 2: Decode DER to Crypt object. */
-    {
-        BOOL success = CryptDecodeObjectEx(
-            X509_ASN_ENCODING,
-            CNG_RSA_PRIVATE_KEY_BLOB,
-            der_data,
-            der_size,
-            CRYPT_DECODE_ALLOC_FLAG | CRYPT_DECODE_NOCOPY_FLAG,
-            NULL,
-            &rsa_blob,
-            &rsa_blob_size);
-
-        if (!success)
-            OE_RAISE(OE_CRYPTO_ERROR);
-    }
-
-    /* Step 3: Convert the Crypt object to a BCrypt Key. */
-    {
-        NTSTATUS status = BCryptImportKeyPair(
-            BCRYPT_RSA_ALG_HANDLE,
-            NULL,
-            BCRYPT_RSAPRIVATE_BLOB,
-            &handle,
-            rsa_blob,
-            rsa_blob_size,
-            0);
-
-        if (status != STATUS_SUCCESS)
-            OE_RAISE(OE_CRYPTO_ERROR);
-    }
-
-    /* Step 4: Convery BCrypt Handle to OE type. */
-    {
-        oe_private_key_t* pkey = (oe_private_key_t*)private_key;
-        pkey->magic = _PRIVATE_KEY_MAGIC;
-        pkey->pkey = handle;
-        handle = NULL;
-    }
-
-    result = OE_OK;
-
-done:
-    if (handle)
-        BCryptDestroyKey(handle);
-
-    /*
-     * Make sure to zero out all confidential (private key) data.
-     * Note that rsa_blob must be freed with LocalFree and before der_data
-     * due to constraints in CryptObjectDecodeEx.
-     */
-    if (rsa_blob)
-    {
-        oe_secure_zero_fill(rsa_blob, rsa_blob_size);
-        LocalFree(rsa_blob);
-        rsa_blob_size = 0;
-    }
-
-    if (der_data)
-    {
-        oe_secure_zero_fill(der_data, der_size);
-        free(der_data);
-        der_size = 0;
-    }
-
-    return result;
+/* Used by tests/crypto/rsa_tests */
+oe_result_t oe_rsa_public_key_write_pem(
+    const oe_rsa_public_key_t* private_key,
+    uint8_t* pem_data,
+    size_t* pem_size)
+{
+    return OE_UNSUPPORTED;
+    //    return oe_public_key_write_pem(
+    //        (const oe_public_key_t*)private_key,
+    //        pem_data,
+    //        pem_size,
+    //        _PUBLIC_KEY_MAGIC);
 }
 
 oe_result_t oe_rsa_private_key_free(oe_rsa_private_key_t* private_key)
 {
-    oe_result_t result = OE_UNEXPECTED;
+    return oe_bcrypt_key_free(private_key, _PRIVATE_KEY_MAGIC);
+}
 
-    if (private_key)
-    {
-        oe_private_key_t* impl = (oe_private_key_t*)private_key;
-
-        /* Check parameter */
-        if (!oe_private_key_is_valid(impl))
-            OE_RAISE(OE_INVALID_PARAMETER);
-
-        /* Release the key */
-        BCryptDestroyKey(impl->pkey);
-
-        /* Clear the fields of the implementation */
-        oe_secure_zero_fill(impl, sizeof(*impl));
-    }
-
-    result = OE_OK;
-
-done:
-    return result;
+oe_result_t oe_rsa_public_key_free(oe_rsa_public_key_t* public_key)
+{
+    return oe_bcrypt_key_free(public_key, _PUBLIC_KEY_MAGIC);
 }
 
 oe_result_t oe_rsa_private_key_sign(
@@ -237,8 +167,9 @@ oe_result_t oe_rsa_private_key_sign(
     const oe_private_key_t* impl = (const oe_private_key_t*)private_key;
 
     /* Check for null parameters and invalid sizes. */
-    if (!oe_private_key_is_valid(impl) || !hash_data || !hash_size ||
-        hash_size > MAXDWORD || !signature_size || *signature_size > MAXDWORD)
+    if (!oe_bcrypt_key_is_valid(impl, _PRIVATE_KEY_MAGIC) || !hash_data ||
+        !hash_size || hash_size > MAXDWORD || !signature_size ||
+        *signature_size > MAXDWORD)
     {
         OE_RAISE(OE_INVALID_PARAMETER);
     }
@@ -307,7 +238,7 @@ oe_result_t oe_rsa_private_key_sign(
             &sig_size,
             BCRYPT_PAD_PKCS1);
 
-        if (status != STATUS_SUCCESS)
+        if (!BCRYPT_SUCCESS(status))
             OE_RAISE(OE_CRYPTO_ERROR);
 
         *signature_size = sig_size;
@@ -319,113 +250,39 @@ done:
     return result;
 }
 
-static oe_result_t _get_public_rsa_blob_info(
-    BCRYPT_KEY_HANDLE key,
-    uint8_t** buffer,
-    ULONG* buffer_size)
+/* Used by tests/crypto/rsa_tests */
+oe_result_t oe_rsa_public_key_verify(
+    const oe_rsa_public_key_t* public_key,
+    oe_hash_type_t hash_type,
+    const void* hash_data,
+    size_t hash_size,
+    const uint8_t* signature,
+    size_t signature_size)
 {
-    oe_result_t result = OE_UNEXPECTED;
-    NTSTATUS status;
-    uint8_t* buffer_local = NULL;
-    ULONG buffer_local_size = 0;
-    BCRYPT_RSAKEY_BLOB* key_header;
-
-    if (!key || !buffer || !buffer_size)
-        OE_RAISE(OE_INVALID_PARAMETER);
-
-    status = BCryptExportKey(
-        key, NULL, BCRYPT_RSAPUBLIC_BLOB, NULL, 0, &buffer_local_size, 0);
-
-    if (status != STATUS_SUCCESS)
-        OE_RAISE(OE_CRYPTO_ERROR);
-
-    buffer_local = (uint8_t*)malloc(buffer_local_size);
-    if (buffer_local == NULL)
-        OE_RAISE(OE_OUT_OF_MEMORY);
-
-    status = BCryptExportKey(
-        key,
-        NULL,
-        BCRYPT_RSAPUBLIC_BLOB,
-        buffer_local,
-        buffer_local_size,
-        &buffer_local_size,
-        0);
-
-    if (status != STATUS_SUCCESS)
-        OE_RAISE(OE_CRYPTO_ERROR);
-
-    /* Sanity check to ensure we get modulus and public exponent. */
-    key_header = (BCRYPT_RSAKEY_BLOB*)buffer_local;
-    if (key_header->cbPublicExp == 0 || key_header->cbModulus == 0)
-        OE_RAISE(OE_CRYPTO_ERROR);
-
-    *buffer = buffer_local;
-    *buffer_size = buffer_local_size;
-    buffer_local = NULL;
-    result = OE_OK;
-
-done:
-    if (buffer_local)
-    {
-        oe_secure_zero_fill(buffer_local, buffer_local_size);
-        free(buffer_local);
-        buffer_local_size = 0;
-    }
-
-    return result;
+    return OE_UNSUPPORTED;
+    //    return oe_public_key_verify(
+    //        (oe_public_key_t*)public_key,
+    //        hash_type,
+    //        hash_data,
+    //        hash_size,
+    //        signature,
+    //        signature_size,
+    //        _PUBLIC_KEY_MAGIC);
 }
 
-oe_result_t oe_rsa_get_public_key_from_private(
-    const oe_rsa_private_key_t* private_key,
+/* Used by tests/crypto/rsa_tests */
+oe_result_t oe_rsa_generate_key_pair(
+    uint64_t bits,
+    uint64_t exponent,
+    oe_rsa_private_key_t* private_key,
     oe_rsa_public_key_t* public_key)
 {
-    oe_result_t result = OE_UNEXPECTED;
-    oe_private_key_t* impl = (oe_private_key_t*)private_key;
-    uint8_t* keybuf = NULL;
-    ULONG keybuf_size;
-
-    if (!oe_private_key_is_valid(impl) || !public_key)
-        OE_RAISE(OE_INVALID_PARAMETER);
-
-    OE_CHECK(_get_public_rsa_blob_info(impl->pkey, &keybuf, &keybuf_size));
-
-    /*
-     * Export the key blob to a public key. Note that the private key blob has
-     * the modulus and the exponent already, so we can just use it to import
-     * the public key.
-     */
-    {
-        NTSTATUS status;
-        BCRYPT_KEY_HANDLE public_key_handle;
-
-        status = BCryptImportKeyPair(
-            BCRYPT_RSA_ALG_HANDLE,
-            NULL,
-            BCRYPT_RSAPUBLIC_BLOB,
-            &public_key_handle,
-            keybuf,
-            keybuf_size,
-            0);
-
-        if (status != STATUS_SUCCESS)
-            OE_RAISE(OE_CRYPTO_ERROR);
-
-        ((oe_public_key_t*)public_key)->magic = _PUBLIC_KEY_MAGIC;
-        ((oe_public_key_t*)public_key)->pkey = public_key_handle;
-    }
-
-    result = OE_OK;
-
-done:
-    if (keybuf)
-    {
-        oe_secure_zero_fill(keybuf, keybuf_size);
-        free(keybuf);
-        keybuf_size = 0;
-    }
-
-    return result;
+    return OE_UNSUPPORTED;
+    //    return _generate_key_pair(
+    //        bits,
+    //        exponent,
+    //        (oe_private_key_t*)private_key,
+    //        (oe_public_key_t*)public_key);
 }
 
 oe_result_t oe_rsa_public_key_get_modulus(
@@ -440,7 +297,7 @@ oe_result_t oe_rsa_public_key_get_modulus(
     BCRYPT_RSAKEY_BLOB* keyblob;
 
     /* Check for null parameters and invalid sizes. */
-    if (!oe_public_key_is_valid(impl) || !buffer_size ||
+    if (!oe_bcrypt_key_is_valid(impl, _PUBLIC_KEY_MAGIC) || !buffer_size ||
         *buffer_size > MAXDWORD)
     {
         OE_RAISE(OE_INVALID_PARAMETER);
@@ -498,7 +355,7 @@ oe_result_t oe_rsa_public_key_get_exponent(
     BCRYPT_RSAKEY_BLOB* keyblob;
 
     /* Check for null parameters and invalid sizes. */
-    if (!oe_public_key_is_valid(impl) || !buffer_size ||
+    if (!oe_bcrypt_key_is_valid(impl, _PUBLIC_KEY_MAGIC) || !buffer_size ||
         *buffer_size > MAXDWORD)
     {
         OE_RAISE(OE_INVALID_PARAMETER);
@@ -541,27 +398,65 @@ done:
     return result;
 }
 
-oe_result_t oe_rsa_public_key_free(oe_rsa_public_key_t* public_key)
+/* Used by tests/crypto/rsa_tests */
+oe_result_t oe_rsa_public_key_equal(
+    const oe_rsa_public_key_t* public_key1,
+    const oe_rsa_public_key_t* public_key2,
+    bool* equal)
+{
+    return OE_UNSUPPORTED;
+    // return _public_key_equal(
+    //    (oe_public_key_t*)public_key1, (oe_public_key_t*)public_key2, equal);
+}
+
+oe_result_t oe_rsa_get_public_key_from_private(
+    const oe_rsa_private_key_t* private_key,
+    oe_rsa_public_key_t* public_key)
 {
     oe_result_t result = OE_UNEXPECTED;
+    oe_private_key_t* impl = (oe_private_key_t*)private_key;
+    uint8_t* keybuf = NULL;
+    ULONG keybuf_size;
 
-    if (public_key)
+    if (!oe_bcrypt_key_is_valid(impl, _PRIVATE_KEY_MAGIC) || !public_key)
+        OE_RAISE(OE_INVALID_PARAMETER);
+
+    OE_CHECK(_get_public_rsa_blob_info(impl->pkey, &keybuf, &keybuf_size));
+
+    /*
+     * Export the key blob to a public key. Note that the private key blob has
+     * the modulus and the exponent already, so we can just use it to import
+     * the public key.
+     */
     {
-        oe_public_key_t* impl = (oe_public_key_t*)public_key;
+        NTSTATUS status;
+        BCRYPT_KEY_HANDLE public_key_handle;
 
-        /* Check parameter */
-        if (!oe_public_key_is_valid(impl))
-            OE_RAISE(OE_INVALID_PARAMETER);
+        status = BCryptImportKeyPair(
+            BCRYPT_RSA_ALG_HANDLE,
+            NULL,
+            BCRYPT_RSAPUBLIC_BLOB,
+            &public_key_handle,
+            keybuf,
+            keybuf_size,
+            0);
 
-        /* Release the key */
-        BCryptDestroyKey(impl->pkey);
+        if (!BCRYPT_SUCCESS(status))
+            OE_RAISE(OE_CRYPTO_ERROR);
 
-        /* Clear the fields of the implementation */
-        oe_secure_zero_fill(impl, sizeof(*impl));
+        ((oe_public_key_t*)public_key)->magic = _PUBLIC_KEY_MAGIC;
+        ((oe_public_key_t*)public_key)->pkey = public_key_handle;
     }
 
     result = OE_OK;
 
 done:
+    if (keybuf)
+    {
+        oe_secure_zero_fill(keybuf, keybuf_size);
+        free(keybuf);
+        keybuf_size = 0;
+    }
+
     return result;
 }
