@@ -43,8 +43,6 @@ sudo apt-get -y install libsgx-enclave-common libsgx-enclave-common-dev libsgx-d
 > package which is necessary for performing remote attestation in Azure. A general
 > implementation for using Intel DCAP outside the Azure environment is coming soon.
 
-As a convenience, you can download and run the [install-open-enclave-stack](/scripts/install-open-enclave-stack) on your target device, which executes all of the above steps.
-
 The packages are also available for download directly:
 - [libsgx-enclave-common_2.3.100.46354-1_amd64.deb](https://download.01.org/intel-sgx/dcap-1.0/SGX_installers/ubuntu16.04/libsgx-enclave-common_2.3.100.46354-1_amd64.deb)
 - [libsgx-enclave-common-dev_2.3.100.0-1_amd64.deb](https://download.01.org/intel-sgx/sgx_repo/ubuntu/pool/main/libs/libsgx-enclave-common-dev/libsgx-enclave-common-dev_2.3.100.0-1_amd64.deb)
