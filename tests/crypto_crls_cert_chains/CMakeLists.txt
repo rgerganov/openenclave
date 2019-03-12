@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
 
+add_subdirectory(data)
 add_subdirectory(host)
 
 if (BUILD_ENCLAVES)
