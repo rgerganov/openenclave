@@ -8,6 +8,7 @@
 #include <openenclave/internal/fd.h>
 #include <openenclave/internal/fs.h>
 #include <openenclave/internal/print.h>
+#include <openenclave/internal/raise.h>
 #include <openenclave/internal/thread.h>
 
 typedef struct _entry
@@ -103,9 +104,11 @@ void oe_release_fd(int fd)
 {
     oe_spin_lock(&_lock);
 
+    OE_TRACE_INFO("oe_release_fd fd =%d", fd);
     if (fd >= 0 && (size_t)fd < _table_size())
     {
         _table()[fd].device = NULL;
+	OE_TRACE_INFO("device =0x%lx", _table()[fd].device);
     }
 
     oe_spin_unlock(&_lock);
@@ -116,6 +119,7 @@ oe_device_t* oe_set_fd_device(int fd, oe_device_t* device)
     oe_device_t* ret = NULL;
     bool locked = false;
 
+    OE_TRACE_INFO("oe_set_fd_device fd =%d", fd);
     if (_init_table() != 0)
         goto done;
 

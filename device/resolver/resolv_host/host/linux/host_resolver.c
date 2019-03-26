@@ -45,7 +45,7 @@ static void _handle_hostresolver_ocall(void* args_)
             struct addrinfo* result = NULL;
             const char* node =
                 (const char*)((args->u.getaddrinfo.nodelen > 0) ? args->buf : NULL);
-            const char *service = (const char*)((args->u.getaddrinfo.servicelen > 0)? args->buf+args->u.getaddrinfo.nodelen: NULL);
+            const char *service = (const char*)((args->u.getaddrinfo.servicelen > 0)? args->buf+args->u.getaddrinfo.nodelen+1 : NULL);
 
             args->u.getaddrinfo.ret =
                 getaddrinfo(node, service, &hints, &result);

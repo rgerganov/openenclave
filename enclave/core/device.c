@@ -8,6 +8,7 @@
 #include <openenclave/internal/device.h>
 #include <openenclave/internal/fs.h>
 #include <openenclave/internal/print.h>
+#include <openenclave/internal/raise.h>
 #include <openenclave/internal/thread.h>
 
 static const size_t ELEMENT_SIZE = sizeof(oe_device_t*);
@@ -63,6 +64,7 @@ uint64_t oe_allocate_devid(uint64_t devid)
     uint64_t ret = OE_DEVID_NULL;
     bool locked = false;
 
+    OE_TRACE_INFO("oe_allocate_devid devid =%d", devid);
     if (!_initialized && _init_table() != 0)
     {
         oe_errno = ENOMEM;
@@ -102,6 +104,7 @@ int oe_release_devid(uint64_t devid)
     int ret = -1;
     bool locked = false;
 
+    OE_TRACE_INFO("oe_release_devid devid =%d", devid);
     if (!_initialized && _init_table() != 0)
     {
         oe_errno = ENOMEM;
@@ -254,6 +257,7 @@ int oe_close(int fd)
     int ret = -1;
     oe_device_t* device = oe_get_fd_device(fd);
 
+    OE_TRACE_INFO("oe_close fd =%d", fd);
     if (!device)
     {
         goto done;

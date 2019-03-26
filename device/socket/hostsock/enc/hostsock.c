@@ -1283,7 +1283,7 @@ static int _hostsock_socket_shutdown(oe_device_t* sock_, int how)
     }
 
     /* Release the sock_ object. */
-    oe_free(sock);
+    //oe_free(sock);
 
     ret = 0;
 
