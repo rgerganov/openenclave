@@ -63,6 +63,8 @@ OE_EXTERNC_BEGIN
 #define OE_PF_HOST 51          /* non-secure host sockets */
 #define OE_PF_MAX 51           /* For now..  */
 
+#define MSG_PEEK 0x0002
+
 /* Address families.  */
 #define OE_AF_UNSPEC OE_PF_UNSPEC
 #define OE_AF_LOCAL OE_PF_LOCAL
