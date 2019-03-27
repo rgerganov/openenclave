@@ -14,7 +14,7 @@ typedef uint32_t socklen_t;
 struct oe_sockaddr;
 struct oe_addrinfo;
 struct oe_msghdr;
-
+struct sockaddr;
 typedef struct _oe_sock_ops
 {
     oe_device_ops_t base;
@@ -38,7 +38,10 @@ typedef struct _oe_sock_ops
     int (*listen)(oe_device_t* dev, int backlog);
 
     ssize_t (*recv)(oe_device_t* dev, void* buf, size_t len, int flags);
+    ssize_t (*recvfrom)(oe_device_t* dev, void* buf, size_t len, int flags, const struct sockaddr *src_addr, socklen_t *addrlen);
     ssize_t (*send)(oe_device_t* dev, const void* buf, size_t len, int flags);
+    ssize_t (*sendto)(oe_device_t* dev, const void* buf, size_t len, int flags, const struct sockaddr *dest_addr, socklen_t addrlen);
+
     ssize_t (*socketpair)(
         oe_device_t* dev,
         int domain,

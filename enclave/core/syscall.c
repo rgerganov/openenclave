@@ -228,7 +228,7 @@ static long _syscall(
             goto done;
         }
         case OE_SYS_fcntl:
-        {
+        {   // Why?
             /* Silently ignore. */
             goto done;
         }
@@ -360,16 +360,13 @@ static long _syscall(
             const struct sockaddr* dest_add = (const struct sockaddr*)arg5;
             socklen_t addrlen = (socklen_t)arg6;
 
-            OE_UNUSED(dest_add);
-            OE_UNUSED(addrlen);
-
             if (dest_add || addrlen)
             {
                 oe_errno = EINVAL;
                 goto done;
             }
 
-            ret = oe_send(sockfd, buf, len, flags);
+            ret = oe_sendto(sockfd, buf, len, flags, dest_add, addrlen);
             goto done;
         }
         case OE_SYS_recvfrom:
@@ -381,13 +378,7 @@ static long _syscall(
             const struct sockaddr* dest_add = (const struct sockaddr*)arg5;
             socklen_t addrlen = (socklen_t)arg6;
 
-            if (dest_add || addrlen)
-            {
-                oe_errno = EINVAL;
-                goto done;
-            }
-
-            ret = oe_recv(sockfd, buf, len, flags);
+            ret = oe_recvfrom(sockfd, buf, len, flags, dest_add, &addrlen);
             goto done;
         }
         case OE_SYS_sendmsg:

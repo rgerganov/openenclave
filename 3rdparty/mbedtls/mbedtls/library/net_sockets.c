@@ -335,13 +335,10 @@ int mbedtls_net_accept( mbedtls_net_context *bind_ctx,
     else
     {
         /* UDP: wait for a message, but keep it in the queue */
+        char buf[1] = { 0 };
+        ret = (int) recvfrom( bind_ctx->fd, buf, sizeof( buf ), MSG_PEEK,
+                        (struct sockaddr *) &client_addr, &n );
 
-//TODO:  Need to request adding support for recvfrom	    
-//        char buf[1] = { 0 };
-
-//        ret = (int) recvfrom( bind_ctx->fd, buf, sizeof( buf ), MSG_PEEK,
-//                        (struct sockaddr *) &client_addr, &n );
-        ret = 0;
 #if defined(_WIN32)
         if( ret == SOCKET_ERROR &&
             WSAGetLastError() == WSAEMSGSIZE )

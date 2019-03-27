@@ -646,6 +646,19 @@ ssize_t (*send)(
     size_t len,
     int flags);
 
+ssize_t (*recvfrom)(
+    oe_device_t* dev,
+    void* buf, size_t len,
+    int flags,
+    struct sockaddr *src_addr,
+    socklen_t *addrlen);
+
+ssize_t (*sendto)(oe_device_t* dev,
+    const void* buf, size_t len,
+    int flags,
+    const struct sockaddr *dest_addr,
+    socklen_t addrlen);
+
 int (*shutdown)(
     oe_device_t* dev,
     int how);

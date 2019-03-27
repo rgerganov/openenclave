@@ -12,6 +12,7 @@
 #include <openenclave/internal/hostsock.h>
 #include <openenclave/bits/safemath.h>
 #include <openenclave/internal/calls.h>
+#include <openenclave/internal/raise.h>
 #include <openenclave/internal/thread.h>
 #include <openenclave/internal/hostbatch.h>
 #include <openenclave/corelibc/stdlib.h>
@@ -678,6 +679,70 @@ done:
     return ret;
 }
 
+static ssize_t _hostsock_recvfrom(
+    oe_device_t* sock_,
+    void* buf,
+    size_t count,
+    int flags,
+    const struct sockaddr *src_addr,
+    socklen_t *addrlen)
+{
+    ssize_t ret = -1;
+    sock_t* sock = _cast_sock(sock_);
+    oe_host_batch_t* batch = _get_host_batch();
+    args_t* args = NULL;
+
+    oe_errno = 0;
+
+    /* Check parameters. */
+    if (!sock || !batch || (count && !buf) || !src_addr || !addrlen)
+    {
+        oe_errno = EINVAL;
+        goto done;
+    }
+
+    /* Input */
+    {
+        if (!(args = oe_host_batch_calloc(batch, sizeof(args_t) + count)))
+        {
+            oe_errno = ENOMEM;
+            goto done;
+        }
+
+        args->op = OE_HOSTSOCK_OP_RECVFROM;
+        args->u.recvfrom.ret = -1;
+        args->u.recvfrom.host_fd = sock->host_fd;
+        args->u.recvfrom.count = count;
+       args->u.recvfrom.flags = flags;
+        args->u.recvfrom.src_addr = (struct sockaddr *)src_addr;
+        args->u.recvfrom.addrlen = addrlen;
+    }
+
+    /* Call */
+    {
+        if (oe_ocall(OE_OCALL_HOSTSOCK, (uint64_t)args, NULL) != OE_OK)
+        {
+            oe_errno = EINVAL;
+            goto done;
+        }
+
+        if ((ret = args->u.recvfrom.ret) == -1)
+        {
+            oe_errno = args->err;
+            goto done;
+        }
+    }
+
+    /* Output */
+    {
+        memcpy(buf, args->buf, count);
+    }
+
+done:
+    return ret;
+}
+
+
 static ssize_t _hostsock_recvmsg(
     oe_device_t* sock_,
     struct oe_msghdr* msg,
@@ -801,6 +866,64 @@ static ssize_t _hostsock_send(
 done:
     return ret;
 }
+
+static ssize_t _hostsock_sendto(
+    oe_device_t* sock_,
+    const void* buf,
+    size_t count,
+    int flags,
+    const struct sockaddr *dest_addr,
+    socklen_t addrlen)
+{
+    ssize_t ret = -1;
+    sock_t* sock = _cast_sock(sock_);
+    oe_host_batch_t* batch = _get_host_batch();
+    args_t* args = NULL;
+
+    oe_errno = 0;
+
+    /* Check parameters. */
+    if (!sock || !batch || (count && !buf) || !dest_addr || (addrlen==0))
+    {
+        oe_errno = EINVAL;
+        goto done;
+    }
+
+    /* Input */
+    {
+        if (!(args = oe_host_batch_calloc(batch, sizeof(args_t) + count)))
+        {
+            oe_errno = ENOMEM;
+            goto done;
+        }
+        args->op = OE_HOSTSOCK_OP_SENDTO;
+        args->u.sendto.ret = -1;
+        args->u.sendto.host_fd = sock->host_fd;
+        args->u.sendto.count = count;
+        args->u.sendto.flags = flags;
+        args->u.sendto.dest_addr = (struct sockaddr *)dest_addr;
+        args->u.sendto.addrlen = addrlen;
+        memcpy(args->buf, buf, count);
+    }
+
+    /* Call */
+    {
+        if (oe_ocall(OE_OCALL_HOSTSOCK, (uint64_t)args, NULL) != OE_OK)
+        {
+            oe_errno = EINVAL;
+            goto done;
+        }
+
+        if ((ret = args->u.sendto.ret) == -1)
+        {
+            oe_errno = args->err;
+            goto done;
+        }
+    }
+
+ done:
+     return ret;
+ }
 
 static ssize_t _hostsock_sendmsg(
     oe_device_t* sock_,
@@ -1393,6 +1516,8 @@ static oe_sock_ops_t _ops = {
     .getsockname = _hostsock_getsockname,
     .recv = _hostsock_recv,
     .send = _hostsock_send,
+    .recvfrom = _hostsock_recvfrom,
+    .sendto = _hostsock_sendto,
     .recvmsg = _hostsock_recvmsg,
     .sendmsg = _hostsock_sendmsg,
 };

@@ -141,7 +141,7 @@ OE_EXTERNC_BEGIN
 #define OE_SHUT_RD 0
 #define OE_SHUT_WR 1
 #define OE_SHUT_RDWR 2
-
+struct sockaddr;
 struct oe_sockaddr
 {
 #include <openenclave/corelibc/sys/bits/sockaddr.h>
@@ -202,9 +202,11 @@ int oe_getsockopt(
     socklen_t* optlen);
 
 ssize_t oe_send(int sockfd, const void* buf, size_t len, int flags);
+ssize_t oe_sendto(int sockfd, const void* buf, size_t len, int flags, const struct sockaddr *dest_addr, socklen_t addrlen);
 ssize_t oe_sendmsg(int sockfd, const struct oe_msghdr* buf, int flags);
 
 ssize_t oe_recv(int sockfd, void* buf, size_t len, int flags);
+ssize_t oe_recvfrom(int sockfd, void* buf, size_t len, int flags, const struct sockaddr *src_addr, socklen_t *addrlen);
 ssize_t oe_recvmsg(int sockfd, struct oe_msghdr* buf, int flags);
 
 int oe_socket_d(uint64_t devid, int domain, int type, int protocol);
@@ -401,9 +403,19 @@ OE_INLINE ssize_t send(int sockfd, const void* buf, size_t len, int flags)
     return oe_send(sockfd, buf, len, flags);
 }
 
+OE_INLINE ssize_t sendto(int sockfd, const void* buf, size_t len, int flags, const struct sockaddr *dest_addr, socklen_t addrlen)
+{
+    return oe_sendto(sockfd, buf, len, flags, dest_addr, addrlen);
+}
+
 OE_INLINE ssize_t recv(int sockfd, void* buf, size_t len, int flags)
 {
     return oe_recv(sockfd, buf, len, flags);
+}
+
+OE_INLINE ssize_t recvfrom(int sockfd, void* buf, size_t len, int flags, struct sockaddr *src_addr, socklen_t *addrlen)
+{
+    return oe_recvfrom(sockfd, buf, len, flags, src_addr, addrlen);
 }
 
 OE_INLINE int getpeername(int sockfd, struct sockaddr* addr, socklen_t* addrlen)

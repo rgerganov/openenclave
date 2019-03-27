@@ -14,7 +14,9 @@ typedef enum _oe_hostsock_op
     OE_HOSTSOCK_OP_SOCKET,
     OE_HOSTSOCK_OP_SOCKETPAIR,
     OE_HOSTSOCK_OP_RECV,
+    OE_HOSTSOCK_OP_RECVFROM,
     OE_HOSTSOCK_OP_SEND,
+    OE_HOSTSOCK_OP_SENDTO,
     OE_HOSTSOCK_OP_RECVMSG,
     OE_HOSTSOCK_OP_SENDMSG,
     OE_HOSTSOCK_OP_CLOSE,
@@ -98,6 +100,15 @@ typedef struct _oe_hostsock_args
             size_t count;
             int flags;
         } recv;
+	struct
+        {
+            int64_t ret;
+            int64_t host_fd;
+            size_t count;
+            int flags;
+            struct sockaddr *src_addr;
+            socklen_t *addrlen;
+        } recvfrom;
         struct
         {
             int64_t ret;
@@ -106,6 +117,15 @@ typedef struct _oe_hostsock_args
             int flags;
         } send;
         struct
+        {
+            int64_t ret;
+            int64_t host_fd;
+            size_t count;
+            int flags;
+            struct sockaddr *dest_addr;
+            socklen_t addrlen;
+        } sendto;
+	struct
         {
             int64_t ret;
             int64_t host_fd;
