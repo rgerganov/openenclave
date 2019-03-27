@@ -1283,7 +1283,7 @@ static int _hostsock_socket_shutdown(oe_device_t* sock_, int how)
     }
 
     /* Release the sock_ object. */
-    //oe_free(sock);
+    // oe_free(sock);
 
     ret = 0;
 
@@ -1426,8 +1426,10 @@ int oe_register_hostsock_device(void)
     if (oe_set_devid_device(devid, oe_get_hostsock_device()) != 0)
         goto done;
 
-    ret = 0;
+    /* set the default socket devid */
+    oe_set_default_socket_devid(OE_DEVID_HOST_SOCKET);
 
+    ret = 0;
 done:
     return ret;
 }
