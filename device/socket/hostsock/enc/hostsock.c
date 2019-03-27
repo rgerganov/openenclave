@@ -357,7 +357,7 @@ static ssize_t _hostsock_socketpair(
         sock2->base.size = sizeof(sock_t);
         sock2->magic = SOCKET_MAGIC;
         sock2->base.ops.socket = _hostsock.base.ops.socket;
-        sock1->host_fd = args->u.socketpair.hostfd2;
+        sock2->host_fd = args->u.socketpair.hostfd2;
         retdevs[0] = retdev1;
         retdevs[1] = retdev2;
     }
@@ -684,8 +684,8 @@ static ssize_t _hostsock_recvfrom(
     void* buf,
     size_t count,
     int flags,
-    const struct sockaddr *src_addr,
-    socklen_t *addrlen)
+    const struct sockaddr* src_addr,
+    socklen_t* addrlen)
 {
     ssize_t ret = -1;
     sock_t* sock = _cast_sock(sock_);
@@ -703,7 +703,8 @@ static ssize_t _hostsock_recvfrom(
 
     /* Input */
     {
-        if (!(args = oe_host_batch_calloc(batch, sizeof(args_t) + count)))
+        if (!(args = oe_host_batch_calloc(
+                  batch, sizeof(args_t) + count + *addrlen)))
         {
             oe_errno = ENOMEM;
             goto done;
@@ -713,9 +714,8 @@ static ssize_t _hostsock_recvfrom(
         args->u.recvfrom.ret = -1;
         args->u.recvfrom.host_fd = sock->host_fd;
         args->u.recvfrom.count = count;
-       args->u.recvfrom.flags = flags;
-        args->u.recvfrom.src_addr = (struct sockaddr *)src_addr;
-        args->u.recvfrom.addrlen = addrlen;
+        args->u.recvfrom.flags = flags;
+        args->u.recvfrom.addrlen = *addrlen;
     }
 
     /* Call */
@@ -735,13 +735,17 @@ static ssize_t _hostsock_recvfrom(
 
     /* Output */
     {
-        memcpy(buf, args->buf, count);
+        memcpy(buf, args->buf, (size_t)ret);
+        *addrlen = args->u.recvfrom.addrlen;
+        memcpy((void*)src_addr, args->buf + count, *addrlen);
     }
 
 done:
+    if (args)
+        oe_host_batch_free(batch);
+
     return ret;
 }
-
 
 static ssize_t _hostsock_recvmsg(
     oe_device_t* sock_,
@@ -872,7 +876,7 @@ static ssize_t _hostsock_sendto(
     const void* buf,
     size_t count,
     int flags,
-    const struct sockaddr *dest_addr,
+    const struct sockaddr* dest_addr,
     socklen_t addrlen)
 {
     ssize_t ret = -1;
@@ -883,7 +887,7 @@ static ssize_t _hostsock_sendto(
     oe_errno = 0;
 
     /* Check parameters. */
-    if (!sock || !batch || (count && !buf) || !dest_addr || (addrlen==0))
+    if (!sock || !batch || (count && !buf) || !dest_addr || (addrlen == 0))
     {
         oe_errno = EINVAL;
         goto done;
@@ -891,7 +895,8 @@ static ssize_t _hostsock_sendto(
 
     /* Input */
     {
-        if (!(args = oe_host_batch_calloc(batch, sizeof(args_t) + count)))
+        if (!(args = oe_host_batch_calloc(
+                  batch, sizeof(args_t) + count + addrlen)))
         {
             oe_errno = ENOMEM;
             goto done;
@@ -901,9 +906,9 @@ static ssize_t _hostsock_sendto(
         args->u.sendto.host_fd = sock->host_fd;
         args->u.sendto.count = count;
         args->u.sendto.flags = flags;
-        args->u.sendto.dest_addr = (struct sockaddr *)dest_addr;
         args->u.sendto.addrlen = addrlen;
         memcpy(args->buf, buf, count);
+        memcpy(args->buf + count, dest_addr, addrlen);
     }
 
     /* Call */
@@ -921,9 +926,9 @@ static ssize_t _hostsock_sendto(
         }
     }
 
- done:
-     return ret;
- }
+done:
+    return ret;
+}
 
 static ssize_t _hostsock_sendmsg(
     oe_device_t* sock_,
@@ -1254,7 +1259,7 @@ static int _hostsock_getpeername(
             goto done;
         }
 
-        args->op = OE_HOSTSOCK_OP_ACCEPT;
+        args->op = OE_HOSTSOCK_OP_GETPEERNAME;
         args->u.getpeername.ret = -1;
         args->u.getpeername.host_fd = sock->host_fd;
         args->u.getpeername.addrlen = *addrlen;
@@ -1314,7 +1319,7 @@ static int _hostsock_getsockname(
             goto done;
         }
 
-        args->op = OE_HOSTSOCK_OP_ACCEPT;
+        args->op = OE_HOSTSOCK_OP_GETSOCKNAME;
         args->u.getsockname.ret = -1;
         args->u.getsockname.host_fd = sock->host_fd;
         args->u.getsockname.addrlen = *addrlen;

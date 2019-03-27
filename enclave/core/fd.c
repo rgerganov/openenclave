@@ -108,7 +108,7 @@ void oe_release_fd(int fd)
     if (fd >= 0 && (size_t)fd < _table_size())
     {
         _table()[fd].device = NULL;
-	OE_TRACE_INFO("device =0x%lx", _table()[fd].device);
+        OE_TRACE_INFO("device =0x%lx", _table()[fd].device);
     }
 
     oe_spin_unlock(&_lock);

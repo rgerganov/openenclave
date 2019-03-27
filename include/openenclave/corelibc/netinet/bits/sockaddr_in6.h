@@ -8,5 +8,4 @@ uint32_t        sin6_flowinfo;
 struct oe_in6_addr sin6_addr;
 uint32_t        sin6_scope_id;
 
-
 // clang-format on

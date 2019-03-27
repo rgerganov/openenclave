@@ -100,14 +100,13 @@ typedef struct _oe_hostsock_args
             size_t count;
             int flags;
         } recv;
-	struct
+        struct
         {
             int64_t ret;
             int64_t host_fd;
             size_t count;
             int flags;
-            struct sockaddr *src_addr;
-            socklen_t *addrlen;
+            socklen_t addrlen;
         } recvfrom;
         struct
         {
@@ -122,10 +121,9 @@ typedef struct _oe_hostsock_args
             int64_t host_fd;
             size_t count;
             int flags;
-            struct sockaddr *dest_addr;
             socklen_t addrlen;
         } sendto;
-	struct
+        struct
         {
             int64_t ret;
             int64_t host_fd;

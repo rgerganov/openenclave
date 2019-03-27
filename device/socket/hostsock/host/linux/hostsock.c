@@ -64,8 +64,8 @@ void oe_handle_hostsock_ocall(void* args_)
                 args->buf,
                 args->u.recvfrom.count,
                 args->u.recvfrom.flags,
-                args->u.recvfrom.src_addr,
-                args->u.recvfrom.addrlen);
+                (struct sockaddr*)(args->buf + args->u.recvfrom.count),
+                &args->u.recvfrom.addrlen);
             break;
         }
         case OE_HOSTSOCK_OP_RECVMSG:
@@ -92,7 +92,7 @@ void oe_handle_hostsock_ocall(void* args_)
                 args->buf,
                 args->u.sendto.count,
                 args->u.sendto.flags,
-                args->u.sendto.dest_addr,
+                (const struct sockaddr*)(args->buf + args->u.sendto.count),
                 args->u.sendto.addrlen);
             break;
         }

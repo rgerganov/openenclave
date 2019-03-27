@@ -258,7 +258,13 @@ ssize_t oe_recv(int sockfd, void* buf, size_t len, int flags)
     return (*psock->ops.socket->recv)(psock, buf, len, flags);
 }
 
-ssize_t oe_recvfrom(int sockfd, void* buf, size_t len, int flags, const struct sockaddr *src_addr, socklen_t *addrlen)
+ssize_t oe_recvfrom(
+    int sockfd,
+    void* buf,
+    size_t len,
+    int flags,
+    const struct sockaddr* src_addr,
+    socklen_t* addrlen)
 {
     oe_device_t* psock = oe_get_fd_device(sockfd);
 
@@ -275,9 +281,9 @@ ssize_t oe_recvfrom(int sockfd, void* buf, size_t len, int flags, const struct s
     }
 
     // The action routine sets errno
-    return (*psock->ops.socket->recvfrom)(psock, buf, len, flags, src_addr, addrlen);
+    return (*psock->ops.socket->recvfrom)(
+        psock, buf, len, flags, src_addr, addrlen);
 }
-
 
 ssize_t oe_send(int sockfd, const void* buf, size_t len, int flags)
 
@@ -300,7 +306,13 @@ ssize_t oe_send(int sockfd, const void* buf, size_t len, int flags)
     return (*psock->ops.socket->send)(psock, buf, len, flags);
 }
 
-ssize_t oe_sendto(int sockfd, const void* buf, size_t len, int flags, const struct sockaddr *dest_addr, socklen_t addrlen)
+ssize_t oe_sendto(
+    int sockfd,
+    const void* buf,
+    size_t len,
+    int flags,
+    const struct sockaddr* dest_addr,
+    socklen_t addrlen)
 
 {
     oe_device_t* psock = oe_get_fd_device(sockfd);
@@ -318,7 +330,8 @@ ssize_t oe_sendto(int sockfd, const void* buf, size_t len, int flags, const stru
     }
 
     // The action routine sets errno
-    return (*psock->ops.socket->sendto)(psock, buf, len, flags, dest_addr, addrlen);
+    return (*psock->ops.socket->sendto)(
+        psock, buf, len, flags, dest_addr, addrlen);
 }
 
 ssize_t oe_recvmsg(int sockfd, struct oe_msghdr* buf, int flags)
