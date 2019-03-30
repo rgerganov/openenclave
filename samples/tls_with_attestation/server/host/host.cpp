@@ -44,7 +44,7 @@ int main(int argc, const char* argv[])
     oe_enclave_t* enclave = NULL;
     oe_result_t result = OE_OK;
     int ret = 1;
-    char *server_port = NULL;
+    char* server_port = NULL;
 
     /* Check argument count */
     if (argc != 3)
@@ -61,7 +61,7 @@ int main(int argc, const char* argv[])
         param_len = strlen(option);
         if (strncmp(argv[2], option, param_len) == 0)
         {
-            //sscanf(argv[2] + param_len, "%d", &port);
+            // sscanf(argv[2] + param_len, "%d", &port);
             server_port = (char*)(argv[2] + param_len);
         }
         else

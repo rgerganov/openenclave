@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 #include <openenclave/enclave.h>
 // #include "../common/dispatcher.h"
-#include "tls_server_t.h"
 #include "../../common/tls_server_enc_pubkey.h"
+#include "tls_server_t.h"
 
 // enclave.h must come before socket.h
 #include <sys/socket.h> // needed fo tls
@@ -79,5 +79,3 @@ const char* enclave_name = "Enclave1";
 // {
 //     return dispatcher.process_encrypted_msg(data, size);
 // }
-
-

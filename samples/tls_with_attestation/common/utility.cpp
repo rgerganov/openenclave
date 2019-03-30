@@ -20,47 +20,53 @@
 
 // input: input_data and input_data_len
 // output: key, key_size
-oe_result_t generate_key_pair(  uint8_t** public_key,
-                                size_t *public_key_size,
-                                uint8_t** private_key,
-                                size_t *private_key_size)
+oe_result_t generate_key_pair(
+    uint8_t** public_key,
+    size_t* public_key_size,
+    uint8_t** private_key,
+    size_t* private_key_size)
 {
     oe_result_t result = OE_FAILURE;
     oe_asymmetric_key_params_t params;
-    char user_data[] = "test user data!";   
+    char user_data[] = "test user data!";
     size_t user_data_size = sizeof(user_data) - 1;
 
-    // Call oe_get_public_key_by_policy() to generate key pair derived from an enclave's seal key
-    // If an enclave does not want to have this key pair tied to enclave instance, it can
-    // generate its own key pair using any chosen crypto API
+    // Call oe_get_public_key_by_policy() to generate key pair derived from an
+    // enclave's seal key If an enclave does not want to have this key pair tied
+    // to enclave instance, it can generate its own key pair using any chosen
+    // crypto API
 
-    params.type = OE_ASYMMETRIC_KEY_EC_SECP256P1;  // MBEDTLS_ECP_DP_SECP256R1
+    params.type = OE_ASYMMETRIC_KEY_EC_SECP256P1; // MBEDTLS_ECP_DP_SECP256R1
     params.format = OE_ASYMMETRIC_KEY_PEM;
     params.user_data = user_data;
     params.user_data_size = user_data_size;
     result = oe_get_public_key_by_policy(
-            OE_SEAL_POLICY_UNIQUE,
-            &params,
-            public_key,
-            public_key_size,
-            NULL,
-            NULL);
+        OE_SEAL_POLICY_UNIQUE,
+        &params,
+        public_key,
+        public_key_size,
+        NULL,
+        NULL);
     if (result != OE_OK)
     {
-        printf("oe_get_public_key_by_policy(OE_SEAL_POLICY_UNIQUE) = %s", oe_result_str(result));
+        printf(
+            "oe_get_public_key_by_policy(OE_SEAL_POLICY_UNIQUE) = %s",
+            oe_result_str(result));
         goto done;
     }
 
     result = oe_get_private_key_by_policy(
-            OE_SEAL_POLICY_UNIQUE,
-            &params,
-            private_key,
-            private_key_size,
-            NULL,
-            NULL);
+        OE_SEAL_POLICY_UNIQUE,
+        &params,
+        private_key,
+        private_key_size,
+        NULL,
+        NULL);
     if (result != OE_OK)
     {
-        printf("oe_get_private_key_by_policy(OE_SEAL_POLICY_UNIQUE) = %s", oe_result_str(result));
+        printf(
+            "oe_get_private_key_by_policy(OE_SEAL_POLICY_UNIQUE) = %s",
+            oe_result_str(result));
         goto done;
     }
 
@@ -94,7 +100,9 @@ exit:
 }
 
 // Consider to move this function into a shared directory
-oe_result_t generate_certificate_and_pkey(mbedtls_x509_crt *cert, mbedtls_pk_context *private_key)
+oe_result_t generate_certificate_and_pkey(
+    mbedtls_x509_crt* cert,
+    mbedtls_pk_context* private_key)
 {
     oe_result_t result = OE_FAILURE;
     uint8_t* host_cert_buf = NULL;
@@ -104,12 +112,13 @@ oe_result_t generate_certificate_and_pkey(mbedtls_x509_crt *cert, mbedtls_pk_con
     size_t private_key_buf_size = 0;
     uint8_t* public_key_buf = NULL;
     size_t public_key_buf_size = 0;
-	int ret = 0;
+    int ret = 0;
 
-    result = generate_key_pair(  &public_key_buf,
-                                 &public_key_buf_size,
-                                 &private_key_buf,
-                                 &private_key_buf_size);
+    result = generate_key_pair(
+        &public_key_buf,
+        &public_key_buf_size,
+        &private_key_buf,
+        &private_key_buf_size);
     if (result != OE_OK)
     {
         printf(" failed with %s\n", oe_result_str(result));
@@ -119,35 +128,39 @@ oe_result_t generate_certificate_and_pkey(mbedtls_x509_crt *cert, mbedtls_pk_con
     printf("public_key_buf_size:[%ld]\n", public_key_buf_size);
     printf("public key used:\n[%s]", public_key_buf);
 
-    result = oe_gen_x509cert_for_TLS(private_key_buf,
-                                     private_key_buf_size,
-                                     public_key_buf,
-                                     public_key_buf_size,
-                                     &output_cert,
-                                     &output_cert_size);
+    result = oe_gen_x509cert_for_TLS(
+        private_key_buf,
+        private_key_buf_size,
+        public_key_buf,
+        public_key_buf_size,
+        &output_cert,
+        &output_cert_size);
     if (result != OE_OK)
     {
         printf(" failed with %s\n", oe_result_str(result));
         goto exit;
     }
 
-	// create mbedtls_x509_crt from output_cert
-	ret = mbedtls_x509_crt_parse_der(cert, output_cert, output_cert_size);
+    // create mbedtls_x509_crt from output_cert
+    ret = mbedtls_x509_crt_parse_der(cert, output_cert, output_cert_size);
     if (ret != 0)
     {
         printf(" failed with ret = %d\n", ret);
-		result = OE_FAILURE;
+        result = OE_FAILURE;
         goto exit;
     }
 
-	// create mbedtls_pk_context from private key data
-	ret = mbedtls_pk_parse_key(	private_key,
-								(const unsigned char *)private_key_buf,
-								private_key_buf_size, NULL, 0);
+    // create mbedtls_pk_context from private key data
+    ret = mbedtls_pk_parse_key(
+        private_key,
+        (const unsigned char*)private_key_buf,
+        private_key_buf_size,
+        NULL,
+        0);
     if (ret != 0)
     {
         printf(" failed with ret = %d\n", ret);
-		result = OE_FAILURE;
+        result = OE_FAILURE;
         goto exit;
     }
 
@@ -159,14 +172,15 @@ exit:
 
     if (output_cert)
         oe_free_x509cert_for_TLS(output_cert);
-    //free(output_cert);
-	return result;
+    // free(output_cert);
+    return result;
 }
 
-bool verify_mrsigner(char *siging_public_key_buf,
-                     size_t siging_public_key_buf_size,
-                     uint8_t *signer_id_buf,
-                     size_t signer_id_buf_size)
+bool verify_mrsigner(
+    char* siging_public_key_buf,
+    size_t siging_public_key_buf_size,
+    uint8_t* signer_id_buf,
+    size_t signer_id_buf_size)
 {
     mbedtls_pk_context ctx;
     mbedtls_pk_type_t pk_type;
@@ -175,9 +189,9 @@ bool verify_mrsigner(char *siging_public_key_buf,
     size_t modulus_size = 0;
     int res = 0;
     bool ret = false;
-    unsigned char *signer = NULL;
+    unsigned char* signer = NULL;
 
-    signer = (unsigned char *)malloc(signer_id_buf_size);
+    signer = (unsigned char*)malloc(signer_id_buf_size);
     if (signer == NULL)
     {
         printf("Out of memory\n");
@@ -189,9 +203,10 @@ bool verify_mrsigner(char *siging_public_key_buf,
     printf("public key\n[%s]\n", siging_public_key_buf);
 
     mbedtls_pk_init(&ctx);
-    res = mbedtls_pk_parse_public_key(&ctx,
-                                      (const unsigned char*)siging_public_key_buf,
-                                      siging_public_key_buf_size);
+    res = mbedtls_pk_parse_public_key(
+        &ctx,
+        (const unsigned char*)siging_public_key_buf,
+        siging_public_key_buf_size);
     if (res != 0)
     {
         printf("mbedtls_pk_parse_public_key failed with %d\n", res);
@@ -212,29 +227,18 @@ bool verify_mrsigner(char *siging_public_key_buf,
     modulus = (uint8_t*)malloc(modulus_size);
     if (modulus == NULL)
     {
-        printf(
-            "malloc for modulus failed with size %zu:\n", modulus_size);
+        printf("malloc for modulus failed with size %zu:\n", modulus_size);
         goto exit;
     }
 
     res = mbedtls_rsa_export_raw(
-        rsa_ctx,
-        modulus,
-        modulus_size,
-        NULL,
-        0,
-        NULL,
-        0,
-        NULL,
-        0,
-        NULL,
-        0);
+        rsa_ctx, modulus, modulus_size, NULL, 0, NULL, 0, NULL, 0, NULL, 0);
     if (res != 0)
     {
         printf("mbedtls_rsa_export failed with %d\n", res);
         goto exit;
     }
- 
+
     // Reverse the modulus and compute sha256 on it.
     for (size_t i = 0; i < modulus_size / 2; i++)
     {
@@ -252,12 +256,13 @@ bool verify_mrsigner(char *siging_public_key_buf,
         goto exit;
     }
 
-    if (memcmp(signer, signer_id_buf, signer_id_buf_size)!=0)
+    if (memcmp(signer, signer_id_buf, signer_id_buf_size) != 0)
     {
         printf("mrsigner is not equal!\n");
         for (int i = 0; i < signer_id_buf_size; i++)
         {
-            printf("0x%x - 0x%x\n", (uint8_t)signer[i], (uint8_t)signer_id_buf[i]);
+            printf(
+                "0x%x - 0x%x\n", (uint8_t)signer[i], (uint8_t)signer_id_buf[i]);
         }
         goto exit;
     }

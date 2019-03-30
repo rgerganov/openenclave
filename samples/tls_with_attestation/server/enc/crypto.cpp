@@ -11,7 +11,7 @@
 Crypto::Crypto()
 {
     m_initialized = init_mbedtls();
-//mbedtls_net_init(NULL);
+    // mbedtls_net_init(NULL);
 }
 
 Crypto::~Crypto()
@@ -127,7 +127,7 @@ exit:
 /**
  * Encrypt encrypts the given data using the given public key.
  * Used to encrypt data using the public key of another enclave.
-*/
+ */
 bool Crypto::Encrypt(
     const uint8_t* pem_public_key,
     const uint8_t* data,

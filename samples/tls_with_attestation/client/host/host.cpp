@@ -51,14 +51,16 @@ int main(int argc, const char* argv[])
     size_t pem_key_size = 0;
     uint8_t* remote_report = NULL;
     size_t remote_report_size = 0;
-    char *server_name = NULL;
-    char *server_port = NULL;
+    char* server_name = NULL;
+    char* server_port = NULL;
 
     /* Check argument count */
     if (argc != 4)
     {
     print_usage:
-        printf("Usage: %s TLS_SERVER_ENCLAVE_PATH -server:<name> -port:<port>\n", argv[0]);
+        printf(
+            "Usage: %s TLS_SERVER_ENCLAVE_PATH -server:<name> -port:<port>\n",
+            argv[0]);
         return 1;
     }
     // read server name  parameter
@@ -95,7 +97,6 @@ int main(int argc, const char* argv[])
     }
     printf("server port = [%s]\n", server_port);
 
-
     printf("Host: Creating two enclaves\n");
     enclave = create_enclave(argv[1]);
     if (enclave == NULL)
@@ -104,7 +105,8 @@ int main(int argc, const char* argv[])
     }
 
     printf("Host: llaunch TLS client to initiate TLS connection\n");
-//    ret = launch_tls_client(enclave, &ret, (char*)TLS_SERVER_NAME, (char*)TLS_SERVER_PORT);
+    //    ret = launch_tls_client(enclave, &ret, (char*)TLS_SERVER_NAME,
+    //    (char*)TLS_SERVER_PORT);
     ret = launch_tls_client(enclave, &ret, server_name, server_port);
     if (ret != 0)
     {

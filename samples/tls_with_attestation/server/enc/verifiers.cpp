@@ -5,10 +5,13 @@
 #include <stdlib.h>
 #include <string>
 
-oe_result_t enclave_identity_verifier_callback(oe_identity_t* identity, void *arg)
+oe_result_t enclave_identity_verifier_callback(
+    oe_identity_t* identity,
+    void* arg)
 {
     (void)arg;
-    printf("enclave_identity_verifier_callback is called with parsed report:\n");
+    printf(
+        "enclave_identity_verifier_callback is called with parsed report:\n");
 
     // Check the enclave's security version
     printf("identity->security_version = %d\n", identity->security_version);
@@ -31,7 +34,7 @@ oe_result_t enclave_identity_verifier_callback(oe_identity_t* identity, void *ar
     {
         printf("0x%0x ", (uint8_t)identity->signer_id[i]);
     }
-    
+
     // The Product ID for the enclave.
     // For SGX enclaves, this is the ISVPRODID value
     printf("\nidentity->product_id :\n");
