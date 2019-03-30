@@ -435,6 +435,9 @@ static int _hostsock_connect(
     }
 
 done:
+    if (args)
+        oe_host_batch_free(batch);
+
     return (int)ret;
 }
 
@@ -511,6 +514,9 @@ static int _hostsock_accept(
     }
 
 done:
+    if (args)
+        oe_host_batch_free(batch);
+
     return (int)ret;
 }
 
@@ -565,6 +571,8 @@ static int _hostsock_bind(
     }
 
 done:
+    if (args)
+        oe_host_batch_free(batch);
 
     return (int)ret;
 }
@@ -617,6 +625,9 @@ static int _hostsock_listen(oe_device_t* sock_, int backlog)
     ret = 0;
 
 done:
+    if (args)
+        oe_host_batch_free(batch);
+
     return ret;
 }
 
@@ -676,6 +687,9 @@ static ssize_t _hostsock_recv(
     }
 
 done:
+    if (args)
+        oe_host_batch_free(batch);
+
     return ret;
 }
 
@@ -691,20 +705,21 @@ static ssize_t _hostsock_recvfrom(
     sock_t* sock = _cast_sock(sock_);
     oe_host_batch_t* batch = _get_host_batch();
     args_t* args = NULL;
-
+    socklen_t len = 0;
     oe_errno = 0;
 
     /* Check parameters. */
-    if (!sock || !batch || (count && !buf) || !src_addr || !addrlen)
+    if (!sock || !batch || (count && !buf))
     {
         oe_errno = EINVAL;
         goto done;
     }
 
+    len = (addrlen ? *addrlen : 0);
+
     /* Input */
     {
-        if (!(args = oe_host_batch_calloc(
-                  batch, sizeof(args_t) + count + *addrlen)))
+        if (!(args = oe_host_batch_calloc(batch, sizeof(args_t) + count + len)))
         {
             oe_errno = ENOMEM;
             goto done;
@@ -715,7 +730,7 @@ static ssize_t _hostsock_recvfrom(
         args->u.recvfrom.host_fd = sock->host_fd;
         args->u.recvfrom.count = count;
         args->u.recvfrom.flags = flags;
-        args->u.recvfrom.addrlen = *addrlen;
+        args->u.recvfrom.addrlen = len;
     }
 
     /* Call */
@@ -736,8 +751,11 @@ static ssize_t _hostsock_recvfrom(
     /* Output */
     {
         memcpy(buf, args->buf, (size_t)ret);
-        *addrlen = args->u.recvfrom.addrlen;
-        memcpy((void*)src_addr, args->buf + count, *addrlen);
+        if (addrlen)
+        {
+            *addrlen = args->u.recvfrom.addrlen;
+            memcpy((void*)src_addr, args->buf + count, *addrlen);
+        }
     }
 
 done:
@@ -813,6 +831,9 @@ static ssize_t _hostsock_recvmsg(
     }
 
 done:
+    if (args)
+        oe_host_batch_free(batch);
+
     return ret;
 }
 
@@ -868,6 +889,9 @@ static ssize_t _hostsock_send(
     }
 
 done:
+    if (args)
+        oe_host_batch_free(batch);
+
     return ret;
 }
 
@@ -887,7 +911,7 @@ static ssize_t _hostsock_sendto(
     oe_errno = 0;
 
     /* Check parameters. */
-    if (!sock || !batch || (count && !buf) || !dest_addr || (addrlen == 0))
+    if (!sock || !batch || (count && !buf))
     {
         oe_errno = EINVAL;
         goto done;
@@ -927,6 +951,9 @@ static ssize_t _hostsock_sendto(
     }
 
 done:
+    if (args)
+        oe_host_batch_free(batch);
+
     return ret;
 }
 
@@ -982,6 +1009,9 @@ static ssize_t _hostsock_sendmsg(
     }
 
 done:
+    if (args)
+        oe_host_batch_free(batch);
+
     return ret;
 }
 
@@ -1035,6 +1065,9 @@ static int _hostsock_close(oe_device_t* sock_)
     ret = 0;
 
 done:
+    if (args)
+        oe_host_batch_free(batch);
+
     return ret;
 }
 
@@ -1097,6 +1130,9 @@ static int _hostsock_dup(oe_device_t* sock_, oe_device_t** new_sock)
     ret = 0;
 
 done:
+    if (args)
+        oe_host_batch_free(batch);
+
     return ret;
 }
 
@@ -1159,6 +1195,9 @@ static int _hostsock_getsockopt(
     }
 
 done:
+    if (args)
+        oe_host_batch_free(batch);
+
     return (int)ret;
 }
 
@@ -1216,6 +1255,9 @@ static int _hostsock_setsockopt(
     }
 
 done:
+    if (args)
+        oe_host_batch_free(batch);
+
     return (int)ret;
 }
 
@@ -1289,6 +1331,9 @@ static int _hostsock_getpeername(
     }
 
 done:
+    if (args)
+        oe_host_batch_free(batch);
+
     return (int)ret;
 }
 
@@ -1349,6 +1394,9 @@ static int _hostsock_getsockname(
     }
 
 done:
+    if (args)
+        oe_host_batch_free(batch);
+
     return (int)ret;
 }
 
@@ -1416,6 +1464,9 @@ static int _hostsock_socket_shutdown(oe_device_t* sock_, int how)
     ret = 0;
 
 done:
+    if (args)
+        oe_host_batch_free(batch);
+
     return ret;
 }
 
@@ -1469,6 +1520,9 @@ static int _hostsock_shutdown_device(oe_device_t* sock_)
     ret = 0;
 
 done:
+    if (args)
+        oe_host_batch_free(batch);
+
     return ret;
 }
 
