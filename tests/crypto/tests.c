@@ -5,9 +5,9 @@
 
 void TestAll()
 {
-    TestASN1();
-    TestCRL();
-    TestEC();
+    //TestASN1();
+    //TestCRL();
+    //TestEC();
     TestRandom();
     TestRdrand();
     TestRSA();
