@@ -1,21 +1,21 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
+// clang-format off
 #include <openenclave/bits/defs.h>
 #include <openenclave/bits/safecrt.h>
 #include <openenclave/internal/raise.h>
 #include <openenclave/internal/utils.h>
-//#include <openenclave/internal/enclavelibc.h>
 #include <openenclave/corelibc/stdlib.h>
 #include <openenclave/corelibc/string.h>
 #include <openenclave/corelibc/unistd.h>
 #include <openenclave/internal/cert.h>
+#include <openenclave/internal/report.h>
 #include <openenclave/internal/sha.h>
 #include "../common/common.h"
 
 // Using mbedtls to create an extended X.509 certificate
 #include "mbedtls_corelibc_defs.h"
-
 #include <mbedtls/certs.h>
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/debug.h>
@@ -26,13 +26,13 @@
 #include <mbedtls/ssl.h>
 #include <mbedtls/x509.h>
 #include <mbedtls/x509_crt.h>
-
 #include "mbedtls_corelibc_undef.h"
+// clang-format on
 
 // need to define a new report OID
-static unsigned char oid_oe_report[] =
-    {0x2A, 0x86, 0x48, 0x86, 0xF8, 0x4D, 0x8A, 0x39, 0x01};
-static int _extract_x509_extension(
+static unsigned char oid_oe_report[] = X509_OID_FOR_QUOTE_EXT;
+
+static int extract_x509_quote_ext(
     uint8_t* ext3_data,
     size_t exts_data_len,
     const uint8_t* report_oid,
@@ -46,10 +46,8 @@ static int _extract_x509_extension(
     mbedtls_x509_buf oid = {0, 0, NULL};
     size_t len = 0;
 
-    // TODO:
-    // Should make this extension a critical one!
-
-    p = (unsigned char*)ext3_data + 83; // need to find out why it;s 83!
+    // TODO: need to find out why it's 83!
+    p = (unsigned char*)ext3_data + 83;
     end = p + exts_data_len;
 
     // Search for target report OID
@@ -78,12 +76,6 @@ static int _extract_x509_extension(
                 }
                 *report_data = p;
                 *report_data_size = len;
-                OE_TRACE_INFO("report_data_size = %d", *report_data_size);
-                OE_TRACE_INFO(
-                    "report_data = %p report_data[0]=0x%x  report_data_size=%d",
-                    *report_data,
-                    **report_data,
-                    *report_data_size);
                 ret = 0;
                 break;
             }
@@ -92,12 +84,12 @@ static int _extract_x509_extension(
     }
 done:
     if (ret)
-        OE_TRACE_ERROR("Expected x509 report extension not found");
+        OE_TRACE_ERROR("Expected x509 quote extension not found");
 
     return ret;
 }
 
-static oe_result_t extract_x509_report_extension(
+static oe_result_t get_x509_report_extension(
     mbedtls_x509_crt* cert,
     uint8_t** report_data,
     size_t* report_data_size)
@@ -105,7 +97,7 @@ static oe_result_t extract_x509_report_extension(
     oe_result_t result = OE_FAILURE;
     int ret = 0;
 
-    ret = _extract_x509_extension(
+    ret = extract_x509_quote_ext(
         cert->v3_ext.p,
         cert->v3_ext.len,
         oid_oe_report,
@@ -115,7 +107,7 @@ static oe_result_t extract_x509_report_extension(
     if (ret)
         OE_RAISE(OE_FAILURE, "ret = %d", ret);
 
-    OE_TRACE_INFO(
+    OE_TRACE_VERBOSE(
         "report_data = %p report_data[0]=0x%x report_data_size=%d",
         *report_data,
         **report_data,
@@ -126,7 +118,7 @@ done:
     return result;
 }
 
-// verify report data against peer certificate
+// verify report user data against peer certificate
 oe_result_t verify_report_user_data(
     mbedtls_x509_crt* cert,
     uint8_t* report_data)
@@ -142,10 +134,12 @@ oe_result_t verify_report_user_data(
     if (ret)
         OE_RAISE_MSG(OE_FAILURE, "ret = %d", ret);
 
-    OE_TRACE_INFO("pk_buf=[%s]", pk_buf);
-    OE_TRACE_INFO("oe_strlen(pk_buf)=[%d]", oe_strlen((const char*)pk_buf));
+    OE_TRACE_VERBOSE(
+        "pk_buf=[%s] \n oe_strlen(pk_buf)=[%d]",
+        pk_buf,
+        oe_strlen((const char*)pk_buf));
 
-    OE_TRACE_VERBOSE("public key from the peer certificate =\n[%s]", pk_buf);
+    // create a hash of public key
     oe_memset_s(sha256.buf, OE_SHA256_SIZE, 0, OE_SHA256_SIZE);
     OE_CHECK(oe_sha256_init(&sha256_ctx));
     OE_CHECK(oe_sha256_update(
@@ -154,7 +148,7 @@ oe_result_t verify_report_user_data(
         oe_strlen((const char*)pk_buf) + 1)); // +1 for the ending null char
     OE_CHECK(oe_sha256_final(&sha256_ctx, &sha256));
 
-    // validate report's user data, which contains hash(public key)
+    // validate report's user data against hash(public key)
     if (memcmp(report_data, (uint8_t*)&sha256, OE_SHA256_SIZE) != 0)
     {
         for (int i = 0; i < OE_SHA256_SIZE; i++)
@@ -168,8 +162,6 @@ oe_result_t verify_report_user_data(
             "hash of peer certificate's public key does not match report data",
             NULL);
     }
-
-    OE_TRACE_INFO("Report user data validation passed");
     result = OE_OK;
 done:
     return result;
@@ -192,7 +184,6 @@ oe_result_t verify_cert_signature(mbedtls_x509_crt* cert)
             error.buf,
             flags);
     }
-    OE_TRACE_INFO("certificate signature verified");
     result = OE_OK;
 done:
     return result;
@@ -221,10 +212,8 @@ oe_result_t oe_verify_tls_cert(
     result = verify_cert_signature(&cert);
     OE_CHECK(result);
 
-    OE_CHECK(extract_x509_report_extension(&cert, &report, &report_size));
-
-    OE_TRACE_INFO("extract_x509_report_extension() succeeded");
-    OE_TRACE_INFO(
+    OE_CHECK(get_x509_report_extension(&cert, &report, &report_size));
+    OE_TRACE_VERBOSE(
         "report = %p report[0]=0x%x report_size=%d",
         report,
         *report,
@@ -236,7 +225,7 @@ oe_result_t oe_verify_tls_cert(
 
     result = oe_verify_report(report, report_size, &parsed_report);
     OE_CHECK(result);
-    OE_TRACE_INFO("oe_verify_report() succeeded");
+    OE_TRACE_VERBOSE("oe_verify_report() succeeded");
 
     // verify report size and type
     if (parsed_report.size != sizeof(oe_report_t))
@@ -256,12 +245,11 @@ oe_result_t oe_verify_tls_cert(
     result = verify_report_user_data(&cert, parsed_report.report_data);
     OE_CHECK(result);
 
-    // callback to the caller to verity enclave identity
+    // invoke a client callback for customized enclave identity check
     if (enclave_identity_callback)
     {
         result = enclave_identity_callback(&parsed_report.identity, arg);
         OE_CHECK(result);
-        OE_TRACE_INFO("enclave_identity_callback() succeeded");
     }
     else
     {

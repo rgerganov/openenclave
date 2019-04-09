@@ -17,7 +17,6 @@
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 
-// verify report data against peer certificate
 oe_result_t verify_report_user_data(
     uint8_t* key_buff,
     size_t key_buff_size,
@@ -26,17 +25,13 @@ oe_result_t get_public_key_from_cert(
     X509* cert,
     uint8_t* key_buff,
     size_t* key_size);
-// oe_result_t verify_cert(X509 *cert);
+
 oe_result_t verify_cert_signature(X509* cert);
 
-static unsigned char oid_oe_report[] =
-    {0x2A, 0x86, 0x48, 0x86, 0xF8, 0x4D, 0x8A, 0x39, 0x01};
-// static unsigned char *quote_ext_oid = "1.2.840.113741.1337.1";
-
-// static char *quote_ext_oid = "1.2.840.113741.1337.1";
+static unsigned char oid_oe_report[] = X509_OID_FOR_QUOTE_EXT;
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
-/* Needed because some versions of OpenSSL do not support X509_up_ref() */
+// Needed because some versions of OpenSSL do not support X509_up_ref()
 static const STACK_OF(X509_EXTENSION) * X509_get0_extensions(const X509* x)
 {
     if (!x->cert_info)
@@ -65,33 +60,7 @@ static oe_result_t get_extension(
     exts = X509_get0_extensions(crt);
     if (exts == NULL)
         OE_RAISE(OE_INVALID_PARAMETER);
-    /*
-        for (int i=0; i < num_of_exts; i++) {
-            X509_EXTENSION *ex = sk_X509_EXTENSION_value(exts, i);
-            assert(ex != NULL);
-            ASN1_OBJECT *obj = X509_EXTENSION_get_object(ex);
-            assert(obj != NULL);
 
-            if (oid_len != obj->length) continue;
-
-            if (0 == memcmp(obj->data, oid, obj->length)) {
-                *data = ex->value->data;
-                *data_len = ex->value->length;
-                break;
-            }
-        }
-    */
-    /*
-            OBJ_obj2txt(s, sizeof(s), X509_EXTENSION_get_object(ex), 1);
-            printf("%d OID=%s\n", i, s);
-
-            asnobject = X509_EXTENSION_get_object(ex);
-            asndata = X509_EXTENSION_get_data(ex);
-
-            p1 = ASN1_STRING_data(asndata);
-            p = p1;
-            length1 = ASN1_STRING_length(asndata);
-    */
     extension_count = sk_X509_EXTENSION_num(exts);
     for (int i = 0; i < extension_count; i++)
     {
@@ -106,13 +75,8 @@ static oe_result_t get_extension(
 
         bytes_count =
             OBJ_obj2txt(buff, sizeof(buff), X509_EXTENSION_get_object(ex), 1);
-        OE_TRACE_INFO("ext(%d) bytes_count = %d\n", i, bytes_count);
+        OE_TRACE_VERBOSE("ext(%d) bytes_count = %d\n", i, bytes_count);
 
-        // bytes_count = i2t_ASN1_OBJECT(buff, sizeof(buff),
-        // X509_EXTENSION_get_object(ex));
-
-        // bytes_count = i2t_ASN1_OBJECT(buff, sizeof(buff),
-        // X509_EXTENSION_get_object(ex));
         if ((bytes_count == 0) && (oid_len != bytes_count))
         {
             OE_TRACE_ERROR(
@@ -121,25 +85,18 @@ static oe_result_t get_extension(
                 oid_len);
             goto done;
         }
-        OE_TRACE_INFO("buff=[%s]\n", buff);
+        OE_TRACE_VERBOSE("buff=[%s]\n", buff);
 
         /* If found matching oid then get the data */
         // if (memcmp(buff, oid, (size_t)bytes_count) == 0)
         // [1.2.840.113741.1337.1]
-        if (memcmp("1.2.840.113741.1337.1", buff, strlen(buff)) == 0)
+        if (memcmp(X509_OID_FOR_QUOTE_STRING, buff, strlen(buff)) == 0)
         {
             ASN1_OCTET_STRING* str;
 
             /* Get the data from the extension */
             if (!(str = X509_EXTENSION_get_data(ex)))
                 OE_RAISE(OE_FAILURE);
-
-            /* If the caller's buffer is too small, raise error */
-            // if ((size_t)str->length > *data_len)
-            // {
-            //     *data_len = (size_t)str->length;
-            //     OE_RAISE(OE_BUFFER_TOO_SMALL);
-            // }
 
             if (data)
             {
@@ -167,7 +124,6 @@ static oe_result_t extract_x509_report_extension(
 
     if (*ext_data_size != 0)
         result = OE_OK;
-
 done:
     return result;
 }
@@ -207,47 +163,7 @@ oe_result_t verify_cert_signature(X509* cert)
 
     return OE_OK;
 }
-/*
-// verify report data against peer certificate
-oe_result_t verify_report_user_data(mbedtls_x509_crt* cert, uint8_t*
-report_data)
-{
-    oe_result_t result = OE_FAILURE;
-    int ret = 0;
-    uint8_t pk_buf[OE_RSA_KEY_BUFF_SIZE];
-    oe_sha256_context_t sha256_ctx = {0};
-    OE_SHA256 sha256;
 
-    oe_memset_s(pk_buf, sizeof(pk_buf), 0, sizeof(pk_buf));
-    ret  = mbedtls_pk_write_pubkey_pem(&cert->pk, pk_buf, sizeof(pk_buf));
-    if (ret)
-        OE_RAISE_MSG(OE_FAILURE, "ret = %d", ret);
-
-    OE_TRACE_INFO("pk_buf=[%s]",pk_buf);
-    OE_TRACE_INFO("oe_strlen(pk_buf)=[%d]",oe_strlen((const char *)pk_buf));
-
-    OE_TRACE_VERBOSE("public key from the peer certificate =\n[%s]", pk_buf);
-    oe_memset_s(sha256.buf, OE_SHA256_SIZE, 0, OE_SHA256_SIZE);
-    OE_CHECK(oe_sha256_init(&sha256_ctx));
-    OE_CHECK(oe_sha256_update(&sha256_ctx, pk_buf, oe_strlen((const char
-*)pk_buf)+1)); // +1 for the ending null char
-    OE_CHECK(oe_sha256_final(&sha256_ctx, &sha256));
-
-    // validate report's user data, which contains hash(public key)
-    if (memcmp(report_data, (uint8_t*)&sha256, OE_SHA256_SIZE) != 0)
-    {
-        for (int i=0; i<OE_SHA256_SIZE; i++)
-            OE_TRACE_VERBOSE("[%d] report_data[0x%x] sha256=0x%x ", i,
-report_data[i], sha256.buf[i]); OE_RAISE_MSG(OE_VERIFY_FAILED, "hash of peer
-certificate's public key does not match report data", NULL);
-    }
-
-    OE_TRACE_INFO("Report user data validation passed");
-    result = OE_OK;
-done:
-    return result;
-}
-*/
 oe_result_t verify_report_user_data(
     uint8_t* key_buff,
     size_t key_buff_size,
@@ -257,7 +173,7 @@ oe_result_t verify_report_user_data(
     OE_SHA256 sha256;
     oe_sha256_context_t sha256_ctx = {0};
 
-    OE_TRACE_INFO("key_buff_size = %ld", key_buff_size);
+    OE_TRACE_VERBOSE("key_buff_size = %ld", key_buff_size);
 
     oe_memset_s(sha256.buf, OE_SHA256_SIZE, 0, OE_SHA256_SIZE);
     OE_CHECK(oe_sha256_init(&sha256_ctx));
@@ -272,7 +188,7 @@ oe_result_t verify_report_user_data(
             "hash of peer certificate's public key does not match report data",
             NULL);
     }
-    OE_TRACE_INFO("report data validation passed", NULL);
+    OE_TRACE_VERBOSE("report data validation passed", NULL);
 
     result = OE_OK;
 done:
@@ -293,7 +209,7 @@ oe_result_t get_public_key_from_cert(
     if ((pkey = X509_get_pubkey(cert)) == NULL)
         OE_RAISE(result, "Error getting public key from certificate", NULL);
 
-    OE_TRACE_INFO("extract_x509_report_extension() succeeded");
+    OE_TRACE_VERBOSE("extract_x509_report_extension() succeeded");
 
     /* ---------------------------------------------------------- *
      * Print the public key information and the key in PEM format *
@@ -304,13 +220,13 @@ oe_result_t get_public_key_from_cert(
         switch (EVP_PKEY_id(pkey))
         {
             case EVP_PKEY_RSA:
-                OE_TRACE_INFO("%d bit RSA Key\n\n", EVP_PKEY_bits(pkey));
+                OE_TRACE_VERBOSE("%d bit RSA Key\n\n", EVP_PKEY_bits(pkey));
                 break;
             case EVP_PKEY_DSA:
-                OE_TRACE_INFO("%d bit DSA Key\n\n", EVP_PKEY_bits(pkey));
+                OE_TRACE_VERBOSE("%d bit DSA Key\n\n", EVP_PKEY_bits(pkey));
                 break;
             default:
-                OE_TRACE_INFO(
+                OE_TRACE_VERBOSE(
                     "%d bit  non-RSA/DSA Key\n\n", EVP_PKEY_bits(pkey));
                 break;
         }
@@ -332,7 +248,7 @@ oe_result_t get_public_key_from_cert(
     // Insert the NUL terminator
     key_buff[bio_len] = '\0';
 
-    OE_TRACE_INFO("public key from cert:\n[%s]\n", key_buff);
+    OE_TRACE_VERBOSE("public key from cert:\n[%s]\n", key_buff);
     *key_size = (size_t)bio_len;
     result = OE_OK;
 done:
@@ -380,11 +296,11 @@ oe_result_t oe_verify_tls_cert(
     //------------------------------------------------------------------------
     result = extract_x509_report_extension(cert, &report, &report_size);
     OE_CHECK(result);
-    OE_TRACE_INFO("extract_x509_report_extension() succeeded");
+    OE_TRACE_VERBOSE("extract_x509_report_extension() succeeded");
 
     result = oe_verify_report(NULL, report, report_size, &parsed_report);
     OE_CHECK(result);
-    OE_TRACE_INFO("oe_verify_report() succeeded");
+    OE_TRACE_VERBOSE("oe_verify_report() succeeded");
 
     //--------------------------------------
     // verify report data: hash(public key)
@@ -399,7 +315,7 @@ oe_result_t oe_verify_tls_cert(
     result = verify_report_user_data(
         pub_key_buf, pub_key_buf_size, parsed_report.report_data);
     OE_CHECK(result);
-    OE_TRACE_INFO("verify_report_user_data passed", NULL);
+    OE_TRACE_VERBOSE("verify_report_user_data passed", NULL);
 
     //---------------------------------------
     // call client to check enclave identity
@@ -408,7 +324,7 @@ oe_result_t oe_verify_tls_cert(
     {
         result = enclave_identity_callback(&parsed_report.identity, arg);
         OE_CHECK(result);
-        OE_TRACE_INFO("enclave_identity_callback() succeeded");
+        OE_TRACE_VERBOSE("enclave_identity_callback() succeeded");
     }
     else
     {

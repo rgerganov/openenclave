@@ -109,7 +109,6 @@ oe_result_t get_TLS_cert(unsigned char** cert, size_t* cert_size)
     size_t public_key_size = 0;
 
     OE_TRACE_INFO("called into enclave\n");
-    // fflush(stdout);
 
     // generate public/private key pair
     result = generate_key_pair(
@@ -120,7 +119,7 @@ oe_result_t get_TLS_cert(unsigned char** cert, size_t* cert_size)
         goto done;
     }
 
-    result = oe_gen_x509cert_for_TLS(
+    result = oe_gen_cert_for_tls(
         private_key,
         private_key_size,
         public_key,

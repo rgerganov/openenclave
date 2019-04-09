@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
+// clang-format off
 #include <openenclave/bits/defs.h>
 #include <openenclave/bits/safecrt.h>
 #include <openenclave/internal/raise.h>
@@ -8,18 +9,18 @@
 #include <openenclave/internal/sgxtypes.h>
 #include <openenclave/internal/sha.h>
 #include <openenclave/internal/utils.h>
-//#include <openenclave/internal/enclavelibc.h>
 #include <openenclave/corelibc/stdlib.h>
 #include <openenclave/corelibc/string.h>
 #include <openenclave/corelibc/unistd.h>
 #include <openenclave/internal/print.h>
+// clang-format on
+//
 #include <stdio.h>
 #include "../common/common.h"
 #include "ec.h"
 #include "key.h"
 #include "rsa.h"
 
-// Using mbedtls to create an extended X.509 certificate
 #include <mbedtls/certs.h>
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/debug.h>
@@ -32,11 +33,11 @@
 #include <mbedtls/x509_crt.h>
 
 #define MAX_CERT_SIZE 8 * 1024
-#define UNREFERENCED(x) (void(x)) // Prevent unused warning
 
 static unsigned char _cert_buf[MAX_CERT_SIZE] = {
     0,
 };
+static unsigned char oid_oe_report[] = X509_OID_FOR_QUOTE_EXT;
 
 oe_result_t calc_sha256(uint8_t* buf, size_t buf_size, OE_SHA256* sha256)
 {
@@ -57,7 +58,8 @@ done:
 }
 
 // Input: an issuer and subject key pair
-// Output: a self-signed certificate
+// Output: a self-signed certificate embedded critical extension with quote
+// information as its content
 oe_result_t generate_x509_cert(
     uint8_t* issuer_key_buf,
     size_t issuer_key_buf_size,
@@ -103,11 +105,8 @@ oe_result_t generate_x509_cert(
     if (ret)
         OE_RAISE_MSG(OE_FAILURE, "ret = 0x%x ", ret);
 
-    //
-    // get attestation data
-    //
-
-    // generate the hash for the certificate's public (subject) key for use as
+    // generate attestation data
+    // calculate the hash for the certificate's public (subject) key for use as
     // report data
     OE_TRACE_VERBOSE("subject_key_buf_size=%d", subject_key_buf_size);
     calc_sha256(subject_key_buf, subject_key_buf_size, &sha256);
@@ -158,12 +157,11 @@ oe_result_t generate_x509_cert(
     if (ret)
         OE_RAISE_MSG(OE_FAILURE, "ret = 0x%x ", ret);
 
-    // Set the validity period for a Certificate Timestamps
-    // get time from the host for not_before
-    // and plus 10 years for the not_after
+    // Set the validity period for a Certificate Timestamps get time from the
+    // host for not_before and plus 10 years for the not_after
     ret = mbedtls_x509write_crt_set_validity(
         &x509cert,
-        "20180101000000",  // not_before
+        "20190401000000",  // not_before
         "20501231235959"); // not_after
     if (ret)
         OE_RAISE_MSG(OE_FAILURE, "ret = 0x%x ", ret);
@@ -188,27 +186,15 @@ oe_result_t generate_x509_cert(
     if (ret)
         OE_RAISE_MSG(OE_FAILURE, "ret = 0x%x ", ret);
 
-        //    1.2.840.113556.1000.1 (ISO assigned OIDs, ISO member body, USA,
-        //    Microsoft)
-        // Need to get a registered OID from the following site
-        // https://www.alvestrand.no/objectid/1.2.840.113556.html
-
-        // // 1.2.840.113741.1337.3
-        // unsigned char oid_ias_sign_ca_cert[] = {0x2A, 0x86, 0x48, 0x86, 0xF8,
-        // 0x4D, 0x8A, 0x39, 0x03};
-#if 1
-    unsigned char oid_oe_report[] = {
-        0x2A, 0x86, 0x48, 0x86, 0xF8, 0x4D, 0x8A, 0x39, 0x01};
     ret = mbedtls_x509write_crt_set_extension(
         &x509cert,
         (char*)oid_oe_report,
         sizeof(oid_oe_report),
-        0 /* criticial */,
+        0, // TODO: Should make this extension a critical one!
         (const uint8_t*)remote_report_buf,
         remote_report_buf_size);
     if (ret)
         OE_RAISE_MSG(OE_FAILURE, "ret = 0x%x ", ret);
-#endif
 
     // Write a built up certificate to a X509 DER structure Note: data
     // is written at the end of the buffer! Use the return value to
@@ -219,7 +205,7 @@ oe_result_t generate_x509_cert(
         MAX_CERT_SIZE,
         mbedtls_ctr_drbg_random,
         &ctr_drbg);
-    OE_TRACE_INFO("bytes_written = 0x%x", bytes_written);
+    OE_TRACE_VERBOSE("bytes_written = 0x%x", bytes_written);
     if (bytes_written <= 0)
         OE_RAISE_MSG(OE_FAILURE, "bytes_written = 0x%x ", bytes_written);
 
@@ -267,7 +253,7 @@ oe_result_t generate_key_pair(
     char user_data[] = "optional user data!";
     size_t user_data_size = sizeof(user_data) - 1;
 
-    OE_TRACE_INFO("Generate key pair");
+    OE_TRACE_VERBOSE("Generate key pair");
 
     params.type = OE_ASYMMETRIC_KEY_EC_SECP256P1; // MBEDTLS_ECP_DP_SECP256R1
     params.format = OE_ASYMMETRIC_KEY_PEM;
@@ -295,7 +281,7 @@ done:
     return result;
 }
 
-oe_result_t oe_gen_x509cert_for_TLS(
+oe_result_t oe_gen_cert_for_tls(
     uint8_t* issuer_key,
     size_t issuer_key_size,
     uint8_t* subject_key,
@@ -305,9 +291,8 @@ oe_result_t oe_gen_x509cert_for_TLS(
 {
     oe_result_t result = OE_FAILURE;
 
-    OE_TRACE_INFO("Calling oe_gen_x509cert_for_TLS");
-    OE_TRACE_INFO("issuer_key = \n[%s]\n", issuer_key);
-    OE_TRACE_INFO("subject_key key =\n[%s]\n", subject_key);
+    OE_TRACE_VERBOSE("Calling oe_gen_cert_for_tls");
+    OE_TRACE_VERBOSE("subject_key key =\n[%s]\n", subject_key);
 
     // generate cert
     OE_CHECK(generate_x509_cert(
@@ -317,7 +302,7 @@ oe_result_t oe_gen_x509cert_for_TLS(
         subject_key_size,
         output_cert,
         output_cert_size));
-    OE_TRACE_INFO(
+    OE_TRACE_VERBOSE(
         "generate_x509_cert succeeded. cert_buf = 0x%p cert_size = %d",
         output_cert,
         output_cert_size);
@@ -329,6 +314,6 @@ done:
 
 void oe_free_x509cert_for_TLS(uint8_t* cert)
 {
-    OE_TRACE_INFO("Calling oe_free_x509cert_for_TLS cert=0x%p", cert);
+    OE_TRACE_VERBOSE("Calling oe_free_x509cert_for_TLS cert=0x%p", cert);
     oe_free(cert);
 }

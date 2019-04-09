@@ -752,9 +752,24 @@ typedef enum _oe_feature
  */
 oe_result_t oe_enable_feature(oe_feature_t feature);
 
-// TODO:
-// Add detailed comments here
-oe_result_t oe_gen_x509cert_for_TLS(
+/**
+ * oe_gen_cert_for_tls.
+ *
+ * This function generates a self-signed certificate with an embedded quote from
+ * the underlying enclave.
+ *
+ * @param issuer_key: a private key used to sign this certificate
+ * @param issuer_key_size The size of the issuer_key buffer.
+ * @param subject_key: a public key used to in the certificate
+ * @param subject_key_size The size of the subject_key buffer.
+ *
+ * @param output_cert: a pointer to buffer pointer, where the buffer is
+ * allocated by a client
+ * @param output_cert_size: size of the buffer above.
+ *
+ * @return OE_OK on success
+ */
+oe_result_t oe_gen_cert_for_tls(
     uint8_t* issuer_key,
     size_t issuer_key_size,
     uint8_t* subject_key,
@@ -767,6 +782,17 @@ oe_result_t oe_gen_x509cert_for_TLS(
  */
 void oe_free_x509cert_for_TLS(uint8_t* cert);
 
+/**
+ * oe_verify_tls_cert
+ *
+ * This function preform a custom validation on the input certificate. This
+ * validation includes exacting a quote extension from the certificate before
+ * performing a quote validation on it. An optional enclave_identity_callback
+ * could be passed in for a calling client to further validate the identity of
+ * the enclave creating the quote.
+ * @retval OE_OK on a successful validation
+ * @retval appropriate error code when failed.
+ */
 typedef oe_result_t (
     *oe_enclave_identity_verify_callback_t)(oe_identity_t* identity, void* arg);
 oe_result_t oe_verify_tls_cert(
