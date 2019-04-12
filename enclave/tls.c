@@ -190,7 +190,7 @@ oe_result_t generate_x509_cert(
         &x509cert,
         (char*)oid_oe_report,
         sizeof(oid_oe_report),
-        0, // TODO: Should make this extension a critical one!
+        0,
         (const uint8_t*)remote_report_buf,
         remote_report_buf_size);
     if (ret)

@@ -29,7 +29,6 @@
 #include "mbedtls_corelibc_undef.h"
 // clang-format on
 
-// need to define a new report OID
 static unsigned char oid_oe_report[] = X509_OID_FOR_QUOTE_EXT;
 
 static int extract_x509_quote_ext(
@@ -43,44 +42,79 @@ static int extract_x509_quote_ext(
     int ret = 1;
     unsigned char* p = NULL;
     const unsigned char* end = NULL;
-    mbedtls_x509_buf oid = {0, 0, NULL};
+    mbedtls_x509_buf oid = {MBEDTLS_ASN1_OID, 0, NULL};
+    unsigned char* end_seq_data;
+    int is_critical;
     size_t len = 0;
+    size_t sequence_len = 0;
 
-    // TODO: need to find out why it's 83!
-    p = (unsigned char*)ext3_data + 83;
+    p = (unsigned char*)ext3_data;
     end = p + exts_data_len;
+
+    if (mbedtls_asn1_get_tag(
+            &p, end, &len, MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE) !=
+        0)
+    {
+        OE_TRACE_ERROR("Attribute: SEQUENCE not found in extension blob");
+        ret = MBEDTLS_ERR_X509_INVALID_EXTENSIONS;
+        goto done;
+    }
 
     // Search for target report OID
     while (p < end)
     {
-        // Get extension OID ID
-        if ((ret = mbedtls_asn1_get_tag(&p, end, &oid.len, MBEDTLS_ASN1_OID)) !=
-            0)
-            return (MBEDTLS_ERR_X509_INVALID_EXTENSIONS + ret);
-
-        if (oid.len == report_oid_len)
+        is_critical = 0; /* DEFAULT FALSE */
+        if (mbedtls_asn1_get_tag(
+                &p,
+                end,
+                &sequence_len,
+                MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE) != 0)
         {
-            oid.tag = MBEDTLS_ASN1_OID;
-            oid.p = p;
-
-            if (0 == memcmp(oid.p, report_oid, report_oid_len))
-            {
-                p += report_oid_len;
-                // Read the octet string tag, length encoded in two bytes
-                ret = mbedtls_asn1_get_tag(
-                    &p, end, &len, MBEDTLS_ASN1_OCTET_STRING);
-                if (ret)
-                {
-                    OE_TRACE_ERROR("ret=%d", ret);
-                    goto done;
-                }
-                *report_data = p;
-                *report_data_size = len;
-                ret = 0;
-                break;
-            }
+            OE_TRACE_ERROR(
+                "Attribute: expected SEQUENCE not found in extension blob");
+            ret = MBEDTLS_ERR_X509_INVALID_EXTENSIONS;
+            goto done;
         }
-        *p += oid.len;
+        OE_TRACE_VERBOSE("SEQUENCE len: %d", sequence_len);
+
+        end_seq_data = p + sequence_len;
+
+        /* Get extension OID ID */
+        oid.tag = *p;
+        if (mbedtls_asn1_get_tag(&p, end, &oid.len, MBEDTLS_ASN1_OID) != 0)
+        {
+            ret = MBEDTLS_ERR_X509_INVALID_EXTENSIONS;
+            goto done;
+        }
+        oid.p = p;
+
+        // Skip standard standard extensions:  basic constrains, subject key id,
+        // authority key id
+        if ((MBEDTLS_OID_CMP(MBEDTLS_OID_BASIC_CONSTRAINTS, &oid) == 0) ||
+            (MBEDTLS_OID_CMP(MBEDTLS_OID_SUBJECT_KEY_IDENTIFIER, &oid) == 0) ||
+            (MBEDTLS_OID_CMP(MBEDTLS_OID_AUTHORITY_KEY_IDENTIFIER, &oid) == 0))
+        {
+            p = end_seq_data;
+            continue;
+        }
+
+        OE_TRACE_INFO("report_oid_len=%d len=%d", report_oid_len, len);
+        // Check against target OID
+        if ((oid.len == report_oid_len) &&
+            (0 == memcmp(oid.p, report_oid, report_oid_len)))
+        {
+            p += report_oid_len;
+            if ((ret = mbedtls_asn1_get_tag(
+                     &p, end, &len, MBEDTLS_ASN1_OCTET_STRING)) != 0)
+            {
+                OE_TRACE_ERROR("Read quote extension failed with ret=%d", ret);
+                goto done;
+            }
+            *report_data = p;
+            *report_data_size = len;
+            break;
+        }
+        p = end_seq_data;
     }
 done:
     if (ret)
