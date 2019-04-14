@@ -4,21 +4,39 @@
 #include <openenclave/corelibc/stdlib.h>
 #include <openenclave/corelibc/sys/socket.h>
 #include <openenclave/internal/resolver.h>
+#include "common_macros.h"
 
+/* ATTN:IO: for SDK app to consume, oe_register_resolver needs to
+ * be published, it cannot stay as internal */
 static size_t _resolver_table_len = 3;
 static oe_resolver_t* _resolver_table[3] = {0}; // At most 3
 
 int oe_register_resolver(int resolver_priority, oe_resolver_t* presolver)
-
 {
-    if (resolver_priority > (int)_resolver_table_len)
+    int ret = -1;
+
+    if (presolver == NULL)
     {
         oe_errno = EINVAL;
-        return -1;
+        OE_TRACE_ERROR("oe_errno =%d  ", oe_errno);
+        ret = oe_errno;
+        goto done;
     }
 
+    if (resolver_priority >= (int)_resolver_table_len)
+    {
+        oe_errno = EINVAL;
+        OE_TRACE_ERROR(
+            "oe_errno =%d  : resolver_priority=%d _resolver_table_len=%ld",
+            oe_errno,
+            resolver_priority,
+            _resolver_table_len);
+        goto done;
+    }
     _resolver_table[resolver_priority] = presolver;
-    return 0;
+    ret = 0;
+done:
+    return ret;
 }
 
 size_t oe_debug_malloc_check();
@@ -31,25 +49,33 @@ int oe_getaddrinfo(
 
 {
     size_t resolver_idx = 0;
-    ssize_t rslt = -1;
+    ssize_t ret = -1;
+    // ATTN:IO: the following size calculation seems to assume there will be
+    // only one set of addrinfo returned, not good
     size_t required_size = (size_t)(
         sizeof(struct oe_addrinfo) + sizeof(struct oe_sockaddr) +
         256); // 255+1 for canonname
     struct oe_addrinfo* retinfo =
         (struct oe_addrinfo*)oe_calloc(1, required_size);
 
+    if (retinfo == NULL)
+    {
+        OE_TRACE_ERROR("oe_calloc failed required_size=%ld", required_size);
+        goto done;
+    }
+
     for (resolver_idx = 0; resolver_idx < _resolver_table_len; resolver_idx++)
     {
         if (_resolver_table[resolver_idx] != NULL)
         {
-            rslt = (*_resolver_table[resolver_idx]->ops->getaddrinfo_r)(
+            ret = (*_resolver_table[resolver_idx]->ops->getaddrinfo_r)(
                 _resolver_table[resolver_idx],
                 node,
                 service,
                 hints,
                 retinfo,
                 &required_size);
-            switch (rslt)
+            switch (ret)
             {
                 case OE_EAI_BADFLAGS:
                 case OE_EAI_NONAME:
@@ -67,7 +93,6 @@ int oe_getaddrinfo(
                 case OE_EAI_NOTCANCELED:
                 case OE_EAI_INTR:
                 case OE_EAI_IDN_ENCODE:
-
                     // This says we failed to find the name. Try the next
                     // resolver .
                     continue;
@@ -75,37 +100,44 @@ int oe_getaddrinfo(
                 case 0:
                 case OE_EAI_ALLDONE:
                     *res = retinfo;
-                    return (int)rslt;
+                    goto done;
 
                 case OE_EAI_OVERFLOW:
                     retinfo = oe_realloc(retinfo, (size_t)required_size);
-                    rslt = (*_resolver_table[resolver_idx]->ops->getaddrinfo_r)(
+                    if (retinfo == NULL)
+                    {
+                        OE_TRACE_ERROR(
+                            "oe_realloc failed required_size=%ld",
+                            required_size);
+                        oe_free(retinfo);
+                        goto done;
+                    }
+                    ret = (*_resolver_table[resolver_idx]->ops->getaddrinfo_r)(
                         _resolver_table[resolver_idx],
                         node,
                         service,
                         hints,
                         retinfo,
                         &required_size);
-                    if (rslt == 0 || rslt == OE_EAI_ALLDONE)
+                    if (ret == 0 || ret == OE_EAI_ALLDONE)
                     {
                         /* ATTN:IO: retinfo is leaked if oe_realloc() fails. */
                         *res = retinfo;
+                        goto done;
                     }
-                    return (int)rslt;
             }
         }
     }
-
-    oe_free(retinfo); // We got nothing
-    return (int)rslt;
+    OE_TRACE_ERROR("oe_getaddrinfo failed");
+    oe_free(retinfo);
+done:
+    return (int)ret;
 }
 
 void oe_freeaddrinfo(struct oe_addrinfo* res)
 {
     if (res != NULL)
-    {
         oe_free(res);
-    }
 }
 
 int oe_getnameinfo(
@@ -119,13 +151,13 @@ int oe_getnameinfo(
 
 {
     size_t resolver_idx = 0;
-    ssize_t rslt = -1;
+    ssize_t ret = -1;
 
     for (resolver_idx = 0; resolver_idx < _resolver_table_len; resolver_idx++)
     {
         if (_resolver_table[resolver_idx] != NULL)
         {
-            rslt = (*_resolver_table[resolver_idx]->ops->getnameinfo)(
+            ret = (*_resolver_table[resolver_idx]->ops->getnameinfo)(
                 _resolver_table[resolver_idx],
                 sa,
                 salen,
@@ -134,11 +166,11 @@ int oe_getnameinfo(
                 serv,
                 servlen,
                 flags);
-            if (rslt == 0)
-            {
-                return (int)rslt;
-            }
+            if (ret == 0)
+                goto done;
         }
     }
-    return (int)rslt;
+    OE_TRACE_ERROR("oe_getnameinfo failed");
+done:
+    return (int)ret;
 }

@@ -12,47 +12,52 @@
 #include <openenclave/internal/fs.h>
 #include <openenclave/internal/print.h>
 #include <openenclave/internal/epoll.h>
+#include "common_macros.h"
 
 int oe_epoll_create(int size)
 {
-    int ed = -1;
+    int ret = -1;
     oe_device_t* pepoll = NULL;
     oe_device_t* pdevice = NULL;
 
     pdevice = oe_get_devid_device(OE_DEVID_EPOLL);
     if ((pepoll = (*pdevice->ops.epoll->create)(pdevice, size)) == NULL)
     {
-        return -1;
+        OE_TRACE_ERROR("size = %d ", size);
+        goto done;
     }
-    ed = oe_assign_fd_device(pepoll);
-    if (ed == -1)
+    ret = oe_assign_fd_device(pepoll);
+    if (ret == -1)
     {
-        // Log error here
-        return -1; // erno is already set
+        OE_TRACE_ERROR("size = %d ", size);
+        goto done;
     }
 
-    return ed;
+done:
+    return ret;
 }
 
 int oe_epoll_create1(int flags)
 {
-    int ed = -1;
+    int ret = -1;
     oe_device_t* pepoll = NULL;
     oe_device_t* pdevice = NULL;
 
     pdevice = oe_get_devid_device(OE_DEVID_EPOLL);
     if ((pepoll = (*pdevice->ops.epoll->create1)(pdevice, flags)) == NULL)
     {
-        return -1;
+        OE_TRACE_ERROR("flags=%d oe_errno =%d ", flags, oe_errno);
+        goto done;
     }
-    ed = oe_assign_fd_device(pepoll);
-    if (ed == -1)
+    ret = oe_assign_fd_device(pepoll);
+    if (ret == -1)
     {
-        // Log error here
-        return -1; // erno is already set
+        OE_TRACE_ERROR("flags=%d oe_errno =%d ", flags, oe_errno);
+        goto done;
     }
 
-    return ed;
+done:
+    return ret;
 }
 
 int oe_epoll_ctl(int epfd, int op, int fd, struct oe_epoll_event* event)
@@ -63,21 +68,14 @@ int oe_epoll_ctl(int epfd, int op, int fd, struct oe_epoll_event* event)
 
     oe_errno = 0;
     /* Check parameters. */
-    if (!pepoll || !pdevice)
-    {
-        oe_errno = EBADF;
-        return -1;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(!pepoll || !pdevice, EINVAL, done);
 
     switch (op)
     {
         case OE_EPOLL_CTL_ADD:
         {
-            if (pepoll->ops.epoll->ctl_add == NULL)
-            {
-                oe_errno = EINVAL;
-                return -1;
-            }
+            IF_TRUE_SET_ERRNO_JUMP(
+                pepoll->ops.epoll->ctl_add == NULL, EINVAL, done);
             ret = (*pepoll->ops.epoll->ctl_add)(epfd, fd, event);
             break;
         }
@@ -94,10 +92,16 @@ int oe_epoll_ctl(int epfd, int op, int fd, struct oe_epoll_event* event)
         default:
         {
             oe_errno = EINVAL;
-            return -1;
+            ret = -1;
+            break;
         }
     }
 
+done:
+    if (ret == -1)
+    {
+        OE_TRACE_ERROR("op(%d) oe_errno =%d ", op, oe_errno);
+    }
     return ret;
 }
 
@@ -112,44 +116,32 @@ int oe_epoll_wait(
     bool has_host_wait =
         true; // false; // 2do. We need to figure out how to wait
 
-    if (!pepoll)
-    {
-        // Log error here
-        return -1; // erno is already set
-    }
-
-    if (pepoll->ops.epoll->wait == NULL)
-    {
-        oe_errno = EINVAL;
-        return -1;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(!pepoll, EINVAL, done);
+    IF_TRUE_SET_ERRNO_JUMP(pepoll->ops.epoll->wait == NULL, EINVAL, done);
 
     // Start an outboard waiter if host involved
     // search polled device list for host involved  2Do
     if (has_host_wait)
     {
-        if ((ret = (*pepoll->ops.epoll->wait)(
-                 epfd, events, (size_t)maxevents, timeout)) < 0)
-        {
-            oe_errno = EINVAL;
-            return -1;
-        }
+        ret = (*pepoll->ops.epoll->wait)(
+            epfd, events, (size_t)maxevents, timeout);
+        IF_TRUE_SET_ERRNO_JUMP(ret < 0, EINVAL, done);
     }
 
-    // We check immedately because we might have gotten lucky and had stuff come
-    // in immediately. If so we skip the wait
+    // We check immediately because we might have gotten lucky and had stuff
+    // come in immediately. If so we skip the wait
     ret = oe_get_epoll_events((uint64_t)epfd, (size_t)maxevents, events);
-
     if (ret == 0)
     {
         if (oe_wait_device_notification(timeout) < 0)
         {
             oe_errno = EPROTO;
-            return -1;
+            ret = -1;
+            goto done;
         }
         ret = oe_get_epoll_events((uint64_t)epfd, (size_t)maxevents, events);
     }
-
+done:
     return ret; // return the number of descriptors that have signalled
 }
 
@@ -195,20 +187,6 @@ OE_INLINE struct _notification_node** _table(void)
     return (struct _notification_node**)_notify_arr.data;
 }
 
-/* ATTN:IO: remove all experimental code. */
-#if 0
-OE_INLINE size_t _table_size(void)
-{
-    return _notify_arr.size;
-}
-
-static void _free_table(void)
-{
-    oe_array_free(&_notify_arr);
-}
-
-#endif
-
 // This gets locked in outer levels
 
 static struct _notification_node** _notification_list(uint64_t epoll_id)
@@ -217,11 +195,8 @@ static struct _notification_node** _notification_list(uint64_t epoll_id)
 
     if (epoll_id >= _notify_arr.size)
     {
-        if (oe_array_resize(&_notify_arr, epoll_id + 1) != 0)
-        {
-            oe_errno = ENOMEM;
-            goto done;
-        }
+        IF_TRUE_SET_ERRNO_JUMP(
+            (oe_array_resize(&_notify_arr, epoll_id + 1) != 0), ENOMEM, done);
     }
 
     ret = _table() + epoll_id;
@@ -325,13 +300,6 @@ int oe_post_device_notifications(
         // complain and throw something as notices are not allowed be null
         return -1;
     }
-/* ATTN:IO: remove all experimental code. */
-#if 0
-int j = 0;
-for(; j < num_notifications; j++) {
-oe_host_printf("notices[%d] = events: %x data = %lx\n", j, notices[j].event_mask, notices[j].data);
-}
-#endif
 
     oe_spin_lock(&_lock);
     locked = true;
@@ -400,28 +368,23 @@ int oe_get_epoll_events(
     size_t numevents = 0;
     size_t i = 0;
     int locked = false;
+    int ret = -1;
 
     if (epfd >= _notify_arr.size)
     {
-        if (oe_array_resize(&_notify_arr, epfd + 1) != 0)
-        {
-            oe_errno = ENOMEM;
-            return -1;
-        }
+        IF_TRUE_SET_ERRNO_JUMP(
+            (oe_array_resize(&_notify_arr, epfd + 1) != 0), ENOMEM, done);
     }
 
     pplist = _table() + epfd;
     if (!*pplist)
     {
         // Not having notifications isn't an error
-        return 0;
+        ret = 0;
+        goto done;
     }
 
-    if (!pevents || maxevents < 1)
-    {
-        oe_errno = EINVAL;
-        return -1;
-    }
+    IF_TRUE_SET_ERRNO_JUMP((!pevents || maxevents < 1), EINVAL, done);
 
     oe_spin_lock(&_lock);
     locked = true;
@@ -447,7 +410,9 @@ int oe_get_epoll_events(
                  pepoll, ptail->notice.list_idx)) == (uint64_t)-1)
         {
             oe_errno = EINVAL;
-            return -1;
+            OE_TRACE_ERROR("epfd=%ld oe_errno=%d", epfd, oe_errno);
+            ret = -1;
+            goto done;
         }
         ptail->notice.event_mask = 0; // Invalidate the node.
         ptail = ptail->pnext;
@@ -456,7 +421,9 @@ int oe_get_epoll_events(
     if (locked)
         oe_spin_unlock(&_lock);
 
-    return (int)numevents;
+    ret = (int)numevents;
+done:
+    return ret;
 }
 
 //
@@ -470,10 +437,8 @@ int oe_posix_polling_notify_ecall(
 {
     int ret = -1;
 
-    if (oe_post_device_notifications((int)num_notifications, notifications) < 0)
-    {
-        goto done;
-    }
+    ret = oe_post_device_notifications((int)num_notifications, notifications);
+    IF_TRUE_SET_ERRNO_JUMP(ret < 0, oe_errno, done);
 
     /* push the doorbell */
     oe_broadcast_device_notification();

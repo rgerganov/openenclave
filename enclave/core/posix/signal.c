@@ -9,6 +9,7 @@
 #include <openenclave/corelibc/errno.h>
 #include <openenclave/internal/print.h>
 #include "oe_t.h"
+#include "common_macros.h"
 // clang-format on
 
 // Poll uses much of the infrastructure from epoll.
@@ -31,22 +32,6 @@ static void _handle_ignore(int signum)
     (void)signum;
 }
 
-/* ATTN:IO: please remove any experimental code. */
-#if 0
-static void _handle_continue(int signum)
-{
-    (void)signum;
-}
-#endif
-
-/* ATTN:IO: please remove any experimental code. */
-#if 0
-static void _handle_terminate(int signum)
-{
-    (void)signum;
-}
-#endif
-
 static void _handle_error(int signum)
 {
     (void)signum;
@@ -56,9 +41,13 @@ int oe_kill(pid_t pid, int signum)
 {
     int retval = -1;
     oe_errno = 0;
+    oe_result_t result = OE_FAILURE;
 
-    if (oe_posix_kill_ocall(&retval, (int)pid, signum, &oe_errno) != OE_OK)
+    if ((result = oe_posix_kill_ocall(&retval, (int)pid, signum, &oe_errno)) !=
+        OE_OK)
     {
+        OE_TRACE_ERROR(
+            "pid=%d signum=%d %s", pid, signum, oe_result_str(result));
         goto done;
     }
 
@@ -75,11 +64,7 @@ int oe_sigaction(
 {
     int retval = -1;
 
-    if (signum >= __OE_NSIG)
-    {
-        oe_errno = EINVAL;
-        goto done;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(signum >= __OE_NSIG, EINVAL, done)
 
     if (oldact)
     {
@@ -100,11 +85,7 @@ oe_sighandler_t oe_signal(int signum, oe_sighandler_t handler)
 {
     oe_sighandler_t retval = OE_SIG_ERR;
 
-    if (signum >= __OE_NSIG)
-    {
-        oe_errno = EINVAL;
-        goto done;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(signum >= __OE_NSIG, EINVAL, done)
 
     _actions[signum].__sigaction_handler.sa_handler = handler;
 
@@ -116,11 +97,7 @@ int oe_posix_signal_notify_ecall(int signum)
 {
     int ret = -1;
 
-    if (signum >= __OE_NSIG)
-    {
-        oe_errno = EINVAL;
-        goto done;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(signum >= __OE_NSIG, EINVAL, done)
 
     if (_actions[signum].sa_flags & SA_SIGINFO)
     {

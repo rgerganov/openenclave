@@ -9,6 +9,7 @@
 #include <openenclave/internal/fs.h>
 #include <openenclave/internal/print.h>
 #include <openenclave/internal/thread.h>
+#include "common_macros.h"
 
 typedef struct _entry
 {
@@ -67,7 +68,10 @@ int oe_assign_fd_device(oe_device_t* device)
     bool locked = false;
 
     if (_init_table() != 0)
+    {
+        OE_TRACE_ERROR("_init_table failed");
         goto done;
+    }
 
     oe_spin_lock(&_lock);
     locked = true;
@@ -82,11 +86,9 @@ int oe_assign_fd_device(oe_device_t* device)
     /* If free slot not found, expand size of the file descriptor table. */
     if (index == _table_size())
     {
-        if (oe_array_resize(&_fd_arr, _table_size() + CHUNK_SIZE) != 0)
-        {
-            oe_errno = ENOMEM;
-            goto done;
-        }
+        int retval = -1;
+        retval = oe_array_resize(&_fd_arr, _table_size() + CHUNK_SIZE);
+        IF_TRUE_SET_ERRNO_JUMP(retval != 0, ENOMEM, done);
     }
 
     _table()[index].device = device;
@@ -104,6 +106,7 @@ void oe_release_fd(int fd)
 {
     oe_spin_lock(&_lock);
 
+    OE_TRACE_VERBOSE("oe_release_fd fd =%d", fd);
     if (fd >= 0 && (size_t)fd < _table_size())
     {
         _table()[fd].device = NULL;
@@ -118,22 +121,16 @@ oe_device_t* oe_set_fd_device(int fd, oe_device_t* device)
     bool locked = false;
 
     if (_init_table() != 0)
+    {
+        OE_TRACE_ERROR("_init_table failed");
         goto done;
+    }
 
     oe_spin_lock(&_lock);
     locked = true;
 
-    if (fd < 0 || (size_t)fd >= _table_size())
-    {
-        oe_errno = EBADF;
-        goto done;
-    }
-
-    if (_table()[fd].device != NULL)
-    {
-        oe_errno = EADDRINUSE;
-        goto done;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(fd < 0 || (size_t)fd >= _table_size(), EBADF, done);
+    IF_TRUE_SET_ERRNO_JUMP(_table()[fd].device != NULL, EADDRINUSE, done);
 
     _table()[fd].device = device; // We don't clone
 
@@ -155,18 +152,12 @@ oe_device_t* oe_get_fd_device(int fd)
     oe_spin_unlock(&_lock);
     locked = true;
 
-    if (fd < 0 || fd >= (int)_table_size())
-    {
-        oe_errno = EINVAL;
-        goto done;
-    }
-
+    OE_TRACE_INFO("fd = %d", fd);
+    IF_TRUE_SET_ERRNO_JUMP(fd < 0 || fd >= (int)_table_size(), EINVAL, done);
     if (_table()[fd].device == NULL)
     {
-        oe_errno = EBADF;
-        goto done;
+        IF_TRUE_SET_ERRNO_JUMP(_table()[fd].device == NULL, EBADF, done);
     }
-
     ret = _table()[fd].device;
 
 done:
@@ -187,6 +178,8 @@ int oe_dup(int oldfd)
     if ((retval = (*old_dev->ops.base->dup)(old_dev, &new_dev)) < 0)
     {
         oe_errno = EBADF;
+        OE_TRACE_ERROR(
+            "oldfd=%d oe_errno=%d retval=%d", oldfd, oe_errno, retval);
         newfd = -1;
         goto done;
     }
@@ -219,6 +212,8 @@ int oe_dup2(int oldfd, int newfd)
     if (oe_set_fd_device(newfd, new_dev))
     {
         oe_errno = EBADF;
+        OE_TRACE_ERROR(
+            "newfd=%d new_dev=%d oe_errno=%d", newfd, new_dev, oe_errno);
         (*new_dev->ops.base->close)(new_dev);
         newfd = -1;
         goto done;

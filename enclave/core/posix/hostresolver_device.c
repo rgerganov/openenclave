@@ -20,6 +20,7 @@
 #include <openenclave/internal/typeinfo.h>
 #include <openenclave/bits/module.h>
 #include "oe_t.h"
+#include "common_macros.h"
 
 /*
 **==============================================================================
@@ -74,8 +75,13 @@ static resolv_t* _cast_resolv(const oe_resolver_t* device)
     resolv_t* resolv = (resolv_t*)device;
 
     if (resolv == NULL || resolv->magic != RESOLV_MAGIC)
-        return NULL;
+    {
+        resolv = NULL;
+        OE_TRACE_ERROR("resolver is invalid");
+        goto done;
+    }
 
+done:
     return resolv;
 }
 
@@ -133,58 +139,56 @@ static int _hostresolv_getaddrinfo_r(
     int retval;
     struct oe_addrinfo* res = NULL;
     oe_struct_type_info_t* structure = &__oe_addrinfo_sti;
-
+    oe_result_t result = OE_FAILURE;
     OE_UNUSED(resolv);
 
     oe_errno = 0;
-
-    if (oe_posix_getaddrinfo_ocall(
-            &retval,
-            node,
-            service,
-            (const struct addrinfo*)hints,
-            (struct addrinfo**)&res,
-            &oe_errno) != OE_OK)
+    if ((result = oe_posix_getaddrinfo_ocall(
+             &retval,
+             node,
+             service,
+             (const struct addrinfo*)hints,
+             (struct addrinfo**)&res,
+             &oe_errno)) != OE_OK)
     {
         oe_errno = EINVAL;
+        OE_TRACE_ERROR("%s retval=%d", oe_result_str(result), retval);
         goto done;
     }
 
     if (retval != 0)
     {
         ret = retval;
+        OE_TRACE_ERROR("ret=%d", ret);
         goto done;
     }
 
     /* Clone the result to caller's memory. */
     {
-        oe_result_t result;
+        oe_result_t result = OE_FAILURE;
 
-        result =
-            oe_type_info_clone(structure, res, res_out, required_size_in_out);
+        if ((result = oe_type_info_clone(
+                 structure, res, res_out, required_size_in_out)) == OE_OK)
+        {
+            ret = 0;
+            goto done;
+        }
 
         if (result == OE_BUFFER_TOO_SMALL)
-        {
             ret = OE_EAI_OVERFLOW;
-            goto done;
-        }
-
-        if (result != OE_OK)
-        {
+        else
             ret = OE_EAI_FAIL;
-            goto done;
-        }
+
+        OE_TRACE_ERROR("%s (ret=%d)", oe_result_str(result), ret);
     }
 
-    ret = 0;
-
 done:
-
     if (res)
     {
         /* Ask host to release the result buffer. */
-        if (oe_posix_freeaddrinfo_ocall((struct addrinfo*)res) != OE_OK)
-            goto done;
+        if ((result = oe_posix_freeaddrinfo_ocall((struct addrinfo*)res)) !=
+            OE_OK)
+            OE_TRACE_ERROR("%s", oe_result_str(result));
     }
 
     return ret;
@@ -194,27 +198,24 @@ static int _hostresolv_shutdown(oe_resolver_t* resolv_)
 {
     int ret = -1;
     resolv_t* resolv = _cast_resolv(resolv_);
+    oe_result_t result = OE_FAILURE;
 
     oe_errno = 0;
 
     /* Check parameters. */
-    if (!resolv_)
-    {
-        oe_errno = EINVAL;
-        goto done;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(!resolv_, EINVAL, done);
 
-    if (oe_posix_shutdown_resolver_device_ocall(&ret, &oe_errno) != OE_OK)
+    if ((result = oe_posix_shutdown_resolver_device_ocall(&ret, &oe_errno)) !=
+        OE_OK)
     {
         oe_errno = EINVAL;
+        OE_TRACE_ERROR("%s (oe_errno=%d)", oe_result_str(result), oe_errno);
         goto done;
     }
 
     /* Release the resolv_ object. */
     oe_free(resolv);
-
     ret = 0;
-
 done:
     return ret;
 }
@@ -233,6 +234,7 @@ oe_result_t oe_load_module_hostresolver(void)
     oe_result_t result = OE_FAILURE;
     static bool _loaded = false;
     static oe_spinlock_t _lock = OE_SPINLOCK_INITIALIZER;
+    int ret = -1;
 
     if (!_loaded)
     {
@@ -242,18 +244,15 @@ oe_result_t oe_load_module_hostresolver(void)
         {
             oe_resolver_t* resolver = &_hostresolv.base;
 
-            if (!resolver)
+            if ((ret = oe_register_resolver(2, resolver)) != 0)
+            {
+                OE_TRACE_ERROR("ret = %d", ret);
                 goto done;
-
-            if (oe_register_resolver(2, resolver) != 0)
-                goto done;
+            }
         }
-
         oe_spin_unlock(&_lock);
     }
-
     result = OE_OK;
-
 done:
     return result;
 }

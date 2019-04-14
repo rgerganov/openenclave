@@ -10,6 +10,7 @@
 #include <openenclave/internal/device.h>
 #include <openenclave/internal/thread.h>
 #include <openenclave/internal/print.h>
+#include "common_macros.h"
 // clang-format on
 
 // Poll uses much of the infrastructure from epoll.
@@ -34,15 +35,12 @@ int oe_poll(struct oe_pollfd* fds, nfds_t nfds, int timeout_ms)
     pepoll = oe_get_fd_device(epfd);
     if (!pepoll)
     {
+        OE_TRACE_ERROR("pepoll is null, epfd=%d", epfd);
         goto done;
     }
 
-    if (pepoll->ops.epoll->addeventdata == NULL)
-    {
-        oe_errno = EINVAL;
-        retval = -1;
-        goto done;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(
+        pepoll->ops.epoll->addeventdata == NULL, EINVAL, done);
 
     for (i = 0; i < nfds; i++)
     {
@@ -55,6 +53,7 @@ int oe_poll(struct oe_pollfd* fds, nfds_t nfds, int timeout_ms)
                 epfd, fds[i].fd, ev.events, ev.data.u64);
             if (retval < 0)
             {
+                OE_TRACE_ERROR("nfds=%d retval=%d", nfds, retval);
                 goto done;
             }
         }
@@ -66,7 +65,7 @@ int oe_poll(struct oe_pollfd* fds, nfds_t nfds, int timeout_ms)
 
     if (!pepoll)
     {
-        // Log error here
+        OE_TRACE_ERROR("pepoll is null, nfds=%d", nfds);
         retval = -1; // errno is already set
         goto done;
     }
@@ -74,6 +73,7 @@ int oe_poll(struct oe_pollfd* fds, nfds_t nfds, int timeout_ms)
     if (pepoll->ops.epoll->poll == NULL)
     {
         oe_errno = EINVAL;
+        OE_TRACE_ERROR("poll is null oe_errno=%d", oe_errno);
         retval = -1;
         goto done;
     }
@@ -85,6 +85,7 @@ int oe_poll(struct oe_pollfd* fds, nfds_t nfds, int timeout_ms)
         if ((retval = (*pepoll->ops.epoll->poll)(
                  epfd, fds, (size_t)nfds, timeout_ms)) < 0)
         {
+            OE_TRACE_ERROR("retval = %d", retval);
             oe_errno = EINVAL;
             goto done;
         }
@@ -96,16 +97,14 @@ int oe_poll(struct oe_pollfd* fds, nfds_t nfds, int timeout_ms)
 
     if (retval == 0)
     {
-        if (oe_wait_device_notification(timeout_ms) < 0)
-        {
-            oe_errno = EPROTO;
-            goto done;
-        }
+        IF_TRUE_SET_ERRNO_JUMP(
+            oe_wait_device_notification(timeout_ms) < 0, EPROTO, done);
         retval = oe_get_epoll_events((uint64_t)epfd, (size_t)nfds, rev);
     }
 
     if (retval < 0)
     {
+        OE_TRACE_ERROR("retval=%d nfds=%d", retval, nfds);
         goto done;
     }
 

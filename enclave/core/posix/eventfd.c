@@ -10,6 +10,7 @@
 #include <openenclave/internal/fs.h>
 #include <openenclave/internal/print.h>
 #include <openenclave/internal/eventfd.h>
+#include "common_macros.h"
 
 int oe_eventfd(unsigned int initval, int flags)
 {

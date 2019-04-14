@@ -8,6 +8,7 @@
 #include <openenclave/internal/device.h>
 #include <openenclave/internal/thread.h>
 #include <openenclave/internal/print.h>
+#include "common_macros.h"
 // clang-format on
 
 static uint64_t _default_socket_devid = OE_DEVID_NULL;
@@ -41,31 +42,31 @@ int oe_socket_d(uint64_t devid, int domain, int type, int protocol)
         devid = OE_DEVID_HOST_SOCKET;
     }
 
-    if (!(device = oe_get_devid_device(devid)))
-    {
-        oe_errno = EINVAL;
-        goto done;
-    }
+    device = oe_get_devid_device(devid);
+    IF_TRUE_SET_ERRNO_JUMP(!device, EINVAL, done);
 
-    if (!device->ops.socket || !device->ops.socket->socket)
-    {
-        oe_errno = EINVAL;
-        goto done;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(
+        !device->ops.socket || !device->ops.socket->socket, EINVAL, done);
 
     if (!(sock = (*device->ops.socket->socket)(device, domain, type, protocol)))
     {
+        OE_TRACE_ERROR(
+            "oe_errno =%d  : socket(devid=%ld, domain=%d type=%d protocol=%d)",
+            oe_errno,
+            devid,
+            domain,
+            type,
+            protocol);
         goto done;
     }
 
     if ((sd = oe_assign_fd_device(sock)) == -1)
     {
+        OE_TRACE_ERROR("oe_assign_fd_device(sock) failed");
         (*device->ops.socket->base.close)(sock);
         goto done;
     }
-
     ret = sd;
-
 done:
     return ret;
 }
@@ -91,25 +92,28 @@ int oe_socketpair(int domain, int type, int protocol, int retfd[2])
         default:
         {
             oe_errno = EINVAL;
+            OE_TRACE_ERROR(
+                "oe_errno =%d  : unknown domain(%d)", oe_errno, domain);
             goto done;
         }
     }
 
-    if (!(device = oe_get_devid_device(devid)))
-    {
-        oe_errno = EINVAL;
-        goto done;
-    }
+    device = oe_get_devid_device(devid);
+    IF_TRUE_SET_ERRNO_JUMP(!device, EINVAL, done);
 
-    if (!device->ops.socket || !device->ops.socket->socketpair)
-    {
-        oe_errno = EINVAL;
-        goto done;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(
+        !device->ops.socket || !device->ops.socket->socketpair, EINVAL, done);
 
     if (!(ret = (*device->ops.socket->socketpair)(
               device, domain, type, protocol, socks)))
     {
+        OE_TRACE_ERROR(
+            "ret=%d : socket(devid=%ld, domain=%d type=%d protocol=%d)",
+            ret,
+            devid,
+            domain,
+            type,
+            protocol);
         goto done;
     }
 
@@ -117,6 +121,7 @@ int oe_socketpair(int domain, int type, int protocol, int retfd[2])
     {
         (*device->ops.socket->base.close)(socks[0]);
         ret = -1;
+        OE_TRACE_ERROR("retfd[0]=%d ret=%d", retfd[0], ret);
         goto done;
     }
 
@@ -124,9 +129,9 @@ int oe_socketpair(int domain, int type, int protocol, int retfd[2])
     {
         (*device->ops.socket->base.close)(socks[1]);
         ret = -1;
+        OE_TRACE_ERROR("retfd[1]=%d ret=%d", retfd[1], ret);
         goto done;
     }
-
 done:
     return (int)ret;
 }
@@ -139,45 +144,47 @@ int oe_socket(int domain, int type, int protocol)
 
 int oe_connect(int sockfd, const struct oe_sockaddr* addr, socklen_t addrlen)
 {
-    int rtnval = -1;
+    int ret = -1;
     oe_device_t* psock = oe_get_fd_device(sockfd);
     if (!psock)
     {
-        // Log error here
-        return -1; // erno is already set
+        OE_TRACE_ERROR("sockfd=%d ret=%d returned null", sockfd, ret);
+        goto done;
     }
 
     if (psock->ops.socket->connect == NULL)
     {
         oe_errno = EINVAL;
-        return -1;
+        OE_TRACE_ERROR(
+            "sockfd=%d oe_errno =%d  connect callback is null",
+            sockfd,
+            oe_errno);
+        goto done;
     }
 
-    rtnval = (*psock->ops.socket->connect)(psock, addr, addrlen);
-    if (rtnval < 0)
+    ret = (*psock->ops.socket->connect)(psock, addr, addrlen);
+    if (ret < 0)
     {
-        return -1;
+        OE_TRACE_ERROR("sockfd=%d ret=%d : connect() failed", sockfd, ret);
+        ret = -1;
+        goto done;
     }
-
-    return rtnval;
+done:
+    return ret;
 }
 
 int oe_accept(int sockfd, struct oe_sockaddr* addr, socklen_t* addrlen)
 {
     oe_device_t* psock = oe_get_fd_device(sockfd);
     oe_device_t* pnewsock = NULL;
-    int newfd = -1;
+    int ret = -1;
     if (!psock)
     {
-        // Log error here
-        return -1; // erno is already set
+        OE_TRACE_ERROR("sockfd=%d ret=%d returned null", sockfd, ret);
+        goto done;
     }
 
-    if (psock->ops.socket->accept == NULL)
-    {
-        oe_errno = EINVAL;
-        return -1;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(psock->ops.socket->accept == NULL, EINVAL, done);
 
     // Create new file descriptor
     (void)(*psock->ops.base->clone)(psock, &pnewsock);
@@ -185,56 +192,58 @@ int oe_accept(int sockfd, struct oe_sockaddr* addr, socklen_t* addrlen)
     if ((*pnewsock->ops.socket->accept)(pnewsock, addr, addrlen) < 0)
     {
         oe_free(pnewsock);
-        return -1;
+        OE_TRACE_ERROR("oe_errno =%d  : accept() failed", oe_errno);
+        goto done;
     }
 
-    newfd = oe_assign_fd_device(pnewsock);
-    if (newfd == -1)
+    ret = oe_assign_fd_device(pnewsock); // new fd
+    if (ret == -1)
     {
-        /* ATTN:IO: handle this. */
+        OE_TRACE_ERROR("newfd(%d) : oe_assign_fd_device() failed", ret);
+        goto done;
     }
 
-    return newfd;
+done:
+    return ret;
 }
 
 int oe_listen(int sockfd, int backlog)
 {
     oe_device_t* psock = oe_get_fd_device(sockfd);
-
+    int ret = -1;
     if (!psock)
     {
-        // Log error here
-        return -1; // erno is already set
+        OE_TRACE_ERROR("oe_get_fd_device(%d) returned null", sockfd);
+        goto done;
     }
 
-    if (psock->ops.socket->listen == NULL)
-    {
-        oe_errno = EINVAL;
-        return -1;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(psock->ops.socket->listen == NULL, EINVAL, done);
 
-    // The action routine sets errno
-    return (*psock->ops.socket->listen)(psock, backlog);
+    ret = (*psock->ops.socket->listen)(psock, backlog);
+done:
+    return ret;
 }
 
 ssize_t oe_recv(int sockfd, void* buf, size_t len, int flags)
 {
     oe_device_t* psock = oe_get_fd_device(sockfd);
+    ssize_t ret = -1;
 
     if (!psock)
     {
-        // Log error here
-        return -1; // erno is already set
+        OE_TRACE_ERROR("oe_get_fd_device(%d) returned null", sockfd);
+        goto done;
     }
 
     if (psock->ops.socket->recv == NULL)
     {
         oe_errno = EINVAL;
-        return -1;
+        OE_TRACE_ERROR("oe_errno =%d  : recv callback is null", oe_errno);
+        goto done;
     }
-
-    // The action routine sets errno
-    return (*psock->ops.socket->recv)(psock, buf, len, flags);
+    ret = (*psock->ops.socket->recv)(psock, buf, len, flags);
+done:
+    return ret;
 }
 
 ssize_t oe_recvfrom(
@@ -246,42 +255,38 @@ ssize_t oe_recvfrom(
     socklen_t* addrlen)
 {
     oe_device_t* psock = oe_get_fd_device(sockfd);
+    ssize_t ret = -1;
 
     if (!psock)
     {
-        // Log error here
-        return -1; // erno is already set
+        OE_TRACE_ERROR("oe_get_fd_device(%d) returned null", sockfd);
+        goto done;
     }
 
-    if (psock->ops.socket->recvfrom == NULL)
-    {
-        oe_errno = EINVAL;
-        return -1;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(psock->ops.socket->recvfrom == NULL, EINVAL, done);
 
-    // The action routine sets errno
-    return (*psock->ops.socket->recvfrom)(
+    ret = (*psock->ops.socket->recvfrom)(
         psock, buf, len, flags, src_addr, addrlen);
+done:
+    return ret;
 }
 
 ssize_t oe_send(int sockfd, const void* buf, size_t len, int flags)
 {
     oe_device_t* psock = oe_get_fd_device(sockfd);
+    ssize_t ret = -1;
 
     if (!psock)
     {
-        // Log error here
-        return -1; // erno is already set
+        OE_TRACE_ERROR("oe_get_fd_device(%d) returned null", sockfd);
+        goto done;
     }
 
-    if (psock->ops.socket->send == NULL)
-    {
-        oe_errno = EINVAL;
-        return -1;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(psock->ops.socket->send == NULL, EINVAL, done);
 
-    // The action routine sets errno
-    return (*psock->ops.socket->send)(psock, buf, len, flags);
+    ret = (*psock->ops.socket->send)(psock, buf, len, flags);
+done:
+    return ret;
 }
 
 ssize_t oe_sendto(
@@ -293,122 +298,112 @@ ssize_t oe_sendto(
     socklen_t addrlen)
 {
     oe_device_t* psock = oe_get_fd_device(sockfd);
+    ssize_t ret = -1;
 
     if (!psock)
     {
-        // Log error here
-        return -1; // erno is already set
+        OE_TRACE_ERROR("oe_get_fd_device(%d) returned null", sockfd);
+        goto done;
     }
 
-    if (psock->ops.socket->sendto == NULL)
-    {
-        oe_errno = EINVAL;
-        return -1;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(psock->ops.socket->sendto == NULL, EINVAL, done);
 
-    // The action routine sets errno
-    return (*psock->ops.socket->sendto)(
+    ret = (*psock->ops.socket->sendto)(
         psock, buf, len, flags, dest_addr, addrlen);
+done:
+    return ret;
 }
 
 ssize_t oe_recvmsg(int sockfd, struct oe_msghdr* buf, int flags)
 {
     oe_device_t* psock = oe_get_fd_device(sockfd);
+    ssize_t ret = -1;
 
     if (!psock)
     {
-        // Log error here
-        return -1; // erno is already set
+        OE_TRACE_ERROR("oe_get_fd_device(%d) returned null", sockfd);
+        goto done;
     }
 
-    if (psock->ops.socket->recvmsg == NULL)
-    {
-        oe_errno = EINVAL;
-        return -1;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(psock->ops.socket->recvmsg == NULL, EINVAL, done);
 
-    // The action routine sets errno
-    return (*psock->ops.socket->recvmsg)(psock, buf, flags);
+    ret = (*psock->ops.socket->recvmsg)(psock, buf, flags);
+done:
+    return ret;
 }
 
 ssize_t oe_sendmsg(int sockfd, const struct oe_msghdr* buf, int flags)
 {
     oe_device_t* psock = oe_get_fd_device(sockfd);
+    ssize_t ret = -1;
 
     if (!psock)
     {
-        // Log error here
-        return -1; // erno is already set
+        OE_TRACE_ERROR("oe_get_fd_device(%d) returned null", sockfd);
+        goto done;
     }
 
-    if (psock->ops.socket->sendmsg == NULL)
-    {
-        oe_errno = EINVAL;
-        return -1;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(psock->ops.socket->sendmsg == NULL, EINVAL, done);
 
-    // The action routine sets errno
-    return (*psock->ops.socket->sendmsg)(psock, buf, flags);
+    ret = (*psock->ops.socket->sendmsg)(psock, buf, flags);
+done:
+    return ret;
 }
 
 int oe_shutdown(int sockfd, int how)
 {
     oe_device_t* psock = oe_get_fd_device(sockfd);
+    int ret = -1;
 
     if (!psock)
     {
-        // Log error here
-        return -1; // erno is already set
+        OE_TRACE_ERROR("oe_get_fd_device(%d) returned null", sockfd);
+        goto done;
     }
 
-    if (psock->ops.socket->shutdown == NULL)
-    {
-        oe_errno = EINVAL;
-        return -1;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(psock->ops.socket->shutdown == NULL, EINVAL, done);
 
-    // The action routine sets errno
-    return (*psock->ops.socket->shutdown)(psock, how);
+    ret = (*psock->ops.socket->shutdown)(psock, how);
+done:
+    return ret;
 }
 
 int oe_getsockname(int sockfd, struct oe_sockaddr* addr, socklen_t* addrlen)
 {
     oe_device_t* psock = oe_get_fd_device(sockfd);
+    int ret = -1;
 
     if (!psock)
     {
-        // Log error here
-        return -1; // erno is already set
+        OE_TRACE_ERROR("oe_get_fd_device(%d) returned null", sockfd);
+        goto done;
     }
 
-    if (psock->ops.socket->getsockname == NULL)
-    {
-        oe_errno = EINVAL;
-        return -1;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(
+        psock->ops.socket->getsockname == NULL, EINVAL, done);
 
-    // The action routine sets errno
-    return (*psock->ops.socket->getsockname)(psock, addr, addrlen);
+    ret = (*psock->ops.socket->getsockname)(psock, addr, addrlen);
+done:
+    return ret;
 }
 
 int oe_getpeername(int sockfd, struct oe_sockaddr* addr, socklen_t* addrlen)
 {
     oe_device_t* psock = oe_get_fd_device(sockfd);
+    int ret = -1;
 
     if (!psock)
     {
-        // Log error here
-        return -1; // erno is already set
+        OE_TRACE_ERROR("oe_get_fd_device(%d) returned null", sockfd);
+        goto done;
     }
 
-    if (psock->ops.socket->getpeername == NULL)
-    {
-        oe_errno = EINVAL;
-        return -1;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(
+        psock->ops.socket->getpeername == NULL, EINVAL, done);
 
-    // The action routine sets errno
-    return (*psock->ops.socket->getsockname)(psock, addr, addrlen);
+    ret = (*psock->ops.socket->getsockname)(psock, addr, addrlen);
+done:
+    return ret;
 }
 
 int oe_getsockopt(
@@ -419,22 +414,20 @@ int oe_getsockopt(
     socklen_t* optlen)
 {
     oe_device_t* psock = oe_get_fd_device(sockfd);
+    int ret = -1;
 
     if (!psock)
     {
-        // Log error here
-        return -1; // erno is already set
+        OE_TRACE_ERROR("oe_get_fd_device(%d) returned null", sockfd);
+        goto done;
     }
 
-    if (psock->ops.socket->getsockopt == NULL)
-    {
-        oe_errno = EINVAL;
-        return -1;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(psock->ops.socket->getsockopt == NULL, EINVAL, done);
 
-    // The action routine sets errno
-    return (*psock->ops.socket->getsockopt)(
-        psock, level, optname, optval, optlen);
+    ret =
+        (*psock->ops.socket->getsockopt)(psock, level, optname, optval, optlen);
+done:
+    return ret;
 }
 
 int oe_setsockopt(
@@ -445,40 +438,36 @@ int oe_setsockopt(
     socklen_t optlen)
 {
     oe_device_t* psock = oe_get_fd_device(sockfd);
+    int ret = -1;
 
     if (!psock)
     {
-        // Log error here
-        return -1; // erno is already set
+        OE_TRACE_ERROR("oe_get_fd_device(%d) returned null", sockfd);
+        goto done;
     }
 
-    if (psock->ops.socket->setsockopt == NULL)
-    {
-        oe_errno = EINVAL;
-        return -1;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(psock->ops.socket->setsockopt == NULL, EINVAL, done);
 
-    // The action routine sets errno
-    return (*psock->ops.socket->setsockopt)(
-        psock, level, optname, optval, optlen);
+    ret =
+        (*psock->ops.socket->setsockopt)(psock, level, optname, optval, optlen);
+done:
+    return ret;
 }
 
 int oe_bind(int sockfd, const struct oe_sockaddr* name, socklen_t namelen)
 {
     oe_device_t* psock = oe_get_fd_device(sockfd);
+    int ret = -1;
 
     if (!psock)
     {
-        // Log error here
-        return -1; // erno is already set
+        OE_TRACE_ERROR("oe_get_fd_device(%d) returned null", sockfd);
+        goto done;
     }
 
-    if (psock->ops.socket->bind == NULL)
-    {
-        oe_errno = EINVAL;
-        return -1;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(psock->ops.socket->bind == NULL, EINVAL, done);
 
-    // The action routine sets errno
-    return (*psock->ops.socket->bind)(psock, name, namelen);
+    ret = (*psock->ops.socket->bind)(psock, name, namelen);
+done:
+    return ret;
 }

@@ -19,6 +19,7 @@
 #include <openenclave/corelibc/string.h>
 #include <openenclave/bits/module.h>
 
+#include "common_macros.h"
 /*
 **==============================================================================
 **
@@ -194,17 +195,10 @@ static int _hostfs_clone(oe_device_t* device, oe_device_t** new_device)
     fs_t* fs = _cast_fs(device);
     fs_t* new_fs = NULL;
 
-    if (!fs || !new_device)
-    {
-        oe_errno = EINVAL;
-        goto done;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(!fs || !new_device, EINVAL, done);
 
-    if (!(new_fs = oe_calloc(1, sizeof(fs_t))))
-    {
-        oe_errno = ENOMEM;
-        goto done;
-    }
+    new_fs = oe_calloc(1, sizeof(fs_t));
+    IF_TRUE_SET_ERRNO_JUMP(!new_fs, ENOMEM, done);
 
     memcpy(new_fs, fs, sizeof(fs_t));
 
@@ -301,11 +295,8 @@ static oe_device_t* _hostfs_open_file(
 
     /* Output */
     {
-        if (!(file = oe_calloc(1, sizeof(file_t))))
-        {
-            oe_errno = ENOMEM;
-            goto done;
-        }
+        file = oe_calloc(1, sizeof(file_t));
+        IF_TRUE_SET_ERRNO_JUMP(!file, ENOMEM, done);
 
         file->base.type = OE_DEVICETYPE_FILE;
         file->base.size = sizeof(file_t);
@@ -365,11 +356,8 @@ static oe_device_t* _hostfs_open_directory(
 
     /* Allocate and initialize the file struct. */
     {
-        if (!(file = oe_calloc(1, sizeof(file_t))))
-        {
-            oe_errno = ENOMEM;
-            goto done;
-        }
+        file = oe_calloc(1, sizeof(file_t));
+        IF_TRUE_SET_ERRNO_JUMP(!file, ENOMEM, done);
 
         file->base.type = OE_DEVICETYPE_FILE;
         file->base.size = sizeof(file_t);
@@ -787,11 +775,8 @@ static oe_device_t* _hostfs_opendir(oe_device_t* fs_, const char* name)
     }
 
     {
-        if (!(dir = oe_calloc(1, sizeof(dir_t))))
-        {
-            oe_errno = ENOMEM;
-            goto done;
-        }
+        dir = oe_calloc(1, sizeof(dir_t));
+        IF_TRUE_SET_ERRNO_JUMP(!dir, ENOMEM, done);
 
         dir->base.type = OE_DEVICETYPE_DIRECTORY;
         dir->base.size = sizeof(dir_t);
@@ -1122,7 +1107,14 @@ static int _hostfs_mkdir(oe_device_t* fs_, const char* pathname, mode_t mode)
         goto done;
 
     if (oe_posix_mkdir_ocall(&ret, full_pathname, mode, &oe_errno) != OE_OK)
+    {
+        OE_TRACE_ERROR(
+            "full_pathname=%s mode=%d oe_errno =%d",
+            full_pathname,
+            (int)mode,
+            oe_errno);
         goto done;
+    }
 
 done:
 
@@ -1240,11 +1232,17 @@ oe_result_t oe_load_module_hostfs(void)
 
             /* Allocate the device id. */
             if (oe_allocate_devid(devid) != devid)
+            {
+                OE_TRACE_ERROR("devid=%d", devid);
                 goto done;
+            }
 
             /* Add the hostfs device to the device table. */
             if (oe_set_devid_device(devid, oe_fs_get_hostfs()) != 0)
+            {
+                OE_TRACE_ERROR("devid=%d", devid);
                 goto done;
+            }
         }
 
         oe_spin_unlock(&_lock);

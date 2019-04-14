@@ -8,6 +8,7 @@
 #include <openenclave/corelibc/stdlib.h>
 #include <openenclave/corelibc/string.h>
 #include <openenclave/corelibc/sys/stat.h>
+#include "common_macros.h"
 
 static char _cwd[OE_PATH_MAX] = "/";
 static oe_pthread_spinlock_t _lock;
@@ -19,21 +20,13 @@ char* oe_getcwd(char* buf, size_t size)
     size_t n;
     bool locked = false;
 
-    if (buf && size == 0)
-    {
-        oe_errno = EINVAL;
-        goto done;
-    }
+    IF_TRUE_SET_ERRNO_JUMP((buf && size == 0), EINVAL, done);
 
     if (!buf)
     {
         n = OE_PATH_MAX;
-
-        if (!(p = oe_malloc(n)))
-        {
-            oe_errno = EINVAL;
-            goto done;
-        }
+        p = oe_malloc(n);
+        IF_TRUE_SET_ERRNO_JUMP(!p, ENOMEM, done);
     }
     else
     {
@@ -43,13 +36,9 @@ char* oe_getcwd(char* buf, size_t size)
 
     oe_pthread_spin_lock(&_lock);
     locked = true;
-    {
-        if (oe_strlcpy(p, _cwd, n) >= n)
-        {
-            oe_errno = ERANGE;
-            goto done;
-        }
-    }
+
+    IF_TRUE_SET_ERRNO_JUMP(oe_strlcpy(p, _cwd, n) >= n, ERANGE, done);
+
     oe_pthread_spin_unlock(&_lock);
     locked = false;
 
@@ -95,13 +84,10 @@ int oe_chdir(const char* path)
     /* Set the _cwd global. */
     oe_pthread_spin_lock(&_lock);
     locked = true;
-    {
-        if (oe_strlcpy(_cwd, real_path, OE_PATH_MAX) >= OE_PATH_MAX)
-        {
-            oe_errno = ENAMETOOLONG;
-            goto done;
-        }
-    }
+    IF_TRUE_SET_ERRNO_JUMP(
+        oe_strlcpy(_cwd, real_path, OE_PATH_MAX) >= OE_PATH_MAX,
+        ENAMETOOLONG,
+        done);
     oe_pthread_spin_unlock(&_lock);
     locked = false;
 

@@ -24,6 +24,8 @@
 #include <openenclave/internal/print.h>
 #include <openenclave/internal/uid.h>
 
+#include "common_macros.h"
+
 typedef int (*ioctl_proc)(
     int fd,
     unsigned long request,
@@ -54,7 +56,6 @@ static long _syscall(
             int flags = (OE_O_CREAT | OE_O_WRONLY | OE_O_TRUNC);
 
             ret = oe_open(pathname, flags, mode);
-
             if (oe_errno == ENOENT)
             {
                 /* Not handled. Let caller dispatch this syscall. */
@@ -82,7 +83,6 @@ static long _syscall(
             int fd = (int)arg1;
             ssize_t off = (ssize_t)arg2;
             int whence = (int)arg3;
-
             ret = oe_lseek(fd, off, whence);
             goto done;
         }
@@ -569,6 +569,7 @@ static long _syscall(
         default:
         {
             oe_errno = ENOSYS;
+            OE_TRACE_WARNING("syscall num =%d not handled", num);
             goto done;
         }
     }

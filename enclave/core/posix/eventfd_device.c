@@ -17,6 +17,7 @@
 #include <openenclave/corelibc/stdlib.h>
 #include <openenclave/corelibc/string.h>
 #include <openenclave/bits/module.h>
+#include "common_macros.h"
 
 /*
 **==============================================================================
@@ -26,6 +27,7 @@
 **==============================================================================
 */
 
+#define MAX_EVENTFD_COUNT 0xfffffffffffffffe
 #define EVENTFD_MAGIC 0x4e455645
 
 typedef struct _eventfd
@@ -58,17 +60,10 @@ static int _eventfd_clone(oe_device_t* device, oe_device_t** new_device)
     eventfd_dev_t* eventfd = _cast_eventfd(device);
     eventfd_dev_t* new_eventfd = NULL;
 
-    if (!eventfd || !new_device)
-    {
-        oe_errno = EINVAL;
-        goto done;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(!eventfd || !new_device, EINVAL, done);
 
-    if (!(new_eventfd = oe_calloc(1, sizeof(eventfd_dev_t))))
-    {
-        oe_errno = ENOMEM;
-        goto done;
-    }
+    new_eventfd = oe_calloc(1, sizeof(eventfd_dev_t));
+    IF_TRUE_SET_ERRNO_JUMP(!new_eventfd, ENOMEM, done);
 
     memcpy(new_eventfd, eventfd, sizeof(eventfd_dev_t));
 
@@ -84,11 +79,7 @@ static int _eventfd_release(oe_device_t* device)
     int ret = -1;
     eventfd_dev_t* eventfd = _cast_eventfd(device);
 
-    if (!eventfd)
-    {
-        oe_errno = EINVAL;
-        goto done;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(!eventfd, EINVAL, done);
 
     oe_free(eventfd);
     ret = 0;
@@ -107,20 +98,14 @@ static oe_device_t* _eventfd_eventfd(
 
     (void)_eventfd_clone(eventfd_, &ret);
     eventfd = _cast_eventfd(ret);
-    if (!eventfd)
-    {
-        oe_errno = EINVAL;
-        goto done;
-    }
-    else
-    {
-        eventfd->base.type = OE_DEVID_EVENTFD;
-        eventfd->base.size = sizeof(eventfd_dev_t);
-        eventfd->magic = EVENTFD_MAGIC;
-        eventfd->base.ops.eventfd = _eventfd.base.ops.eventfd;
-        eventfd->count = initval;
-        eventfd->flags = (uint32_t)flags;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(!eventfd, EINVAL, done);
+
+    eventfd->base.type = OE_DEVID_EVENTFD;
+    eventfd->base.size = sizeof(eventfd_dev_t);
+    eventfd->magic = EVENTFD_MAGIC;
+    eventfd->base.ops.eventfd = _eventfd.base.ops.eventfd;
+    eventfd->count = initval;
+    eventfd->flags = (uint32_t)flags;
 
 done:
     return ret;
@@ -134,20 +119,13 @@ static ssize_t _eventfd_read(oe_device_t* eventfd_, void* buf, size_t count)
     oe_errno = 0;
 
     /* Check parameters. */
-    if (!eventfd || !buf || (count < sizeof(uint64_t)))
-    {
-        oe_errno = EINVAL;
-        goto done;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(
+        !eventfd || !buf || (count < sizeof(uint64_t)), EINVAL, done);
 
     if (!eventfd->count)
     {
-        if (eventfd->flags & OE_EFD_NONBLOCK)
-        {
-            oe_errno = EAGAIN;
-            return -1;
-        }
-        else
+        IF_TRUE_SET_ERRNO_JUMP(eventfd->flags & OE_EFD_NONBLOCK, EAGAIN, done);
+
         {
             /* ATTN:IO: is this complete? */
             // Block on condition variable
@@ -186,21 +164,14 @@ static ssize_t _eventfd_write(
     oe_errno = 0;
 
     /* Check parameters. */
-    if (!eventfd || !buf || (count < sizeof(uint64_t)))
-    {
-        oe_errno = EINVAL;
-        goto done;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(
+        !eventfd || !buf || (count < sizeof(uint64_t)), EINVAL, done);
 
     /* ATTN:IO: use constant here. */
-    if (eventfd->count >= 0xfffffffffffffffe)
+    if (eventfd->count >= MAX_EVENTFD_COUNT)
     {
-        if (eventfd->flags & OE_EFD_NONBLOCK)
-        {
-            oe_errno = EAGAIN;
-            return -1;
-        }
-        else
+        IF_TRUE_SET_ERRNO_JUMP(eventfd->flags & OE_EFD_NONBLOCK, EAGAIN, done);
+
         {
             // signal condition variable
         }
@@ -209,9 +180,9 @@ static ssize_t _eventfd_write(
     memcpy(&incr, buf, sizeof(uint64_t));
 
     total = (__uint128_t)eventfd->count + (__uint128_t)incr;
-    if (total > 0xfffffffffffffffe)
+    if (total > MAX_EVENTFD_COUNT)
     {
-        eventfd->count = 0xfffffffffffffffe;
+        eventfd->count = MAX_EVENTFD_COUNT;
     }
     else
     {
@@ -232,11 +203,7 @@ static int _eventfd_close(oe_device_t* eventfd_)
     oe_errno = 0;
 
     /* Check parameters. */
-    if (!eventfd_)
-    {
-        oe_errno = EINVAL;
-        goto done;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(!eventfd_, EINVAL, done);
 
     /* Release the eventfd_ object. */
     oe_free(eventfd);
@@ -255,11 +222,7 @@ static int _eventfd_shutdown_device(oe_device_t* eventfd_)
     oe_errno = 0;
 
     /* Check parameters. */
-    if (!eventfd_)
-    {
-        oe_errno = EINVAL;
-        goto done;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(!eventfd_, EINVAL, done);
 
     /* Release the eventfd_ object. */
     oe_free(eventfd);
@@ -328,6 +291,7 @@ oe_result_t oe_load_module_eventfd(void)
 {
     oe_result_t result = OE_FAILURE;
     static bool _loaded = false;
+    int ret = -1;
     static oe_spinlock_t _lock = OE_SPINLOCK_INITIALIZER;
 
     if (!_loaded)
@@ -340,20 +304,23 @@ oe_result_t oe_load_module_eventfd(void)
 
             /* Allocate the device id. */
             if (oe_allocate_devid(devid) != devid)
+            {
+                OE_TRACE_ERROR("devid=%d", devid);
                 goto done;
+            }
 
             /* Add the hostfs device to the device table. */
-            if (oe_set_devid_device(devid, oe_get_eventfd_device()) != 0)
+            if ((ret = oe_set_devid_device(devid, oe_get_eventfd_device())) !=
+                0)
+            {
+                OE_TRACE_ERROR("devid=%d ret=%d", devid, ret);
                 goto done;
-
+            }
             _loaded = true;
         }
-
         oe_spin_unlock(&_lock);
     }
-
     result = OE_OK;
-
 done:
     return result;
 }

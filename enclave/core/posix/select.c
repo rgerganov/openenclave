@@ -7,6 +7,7 @@
 #include <openenclave/corelibc/time.h>
 #include <openenclave/internal/epoll.h>
 #include <openenclave/internal/print.h>
+#include "common_macros.h"
 
 void _set_to_fd_list(
     oe_fd_set* set,
@@ -122,6 +123,7 @@ int oe_select(
     epoll_fd = oe_epoll_create1(0);
     if (epoll_fd < 0)
     {
+        OE_TRACE_ERROR("epoll_fd =%d", epoll_fd);
         return epoll_fd;
     }
 
@@ -135,6 +137,7 @@ int oe_select(
         ret = oe_epoll_ctl(epoll_fd, OE_EPOLL_CTL_ADD, fd_list[i], &ev);
         if (ret < 0)
         {
+            OE_TRACE_ERROR("ret=%d epoll_fd=%d", ret, epoll_fd);
             goto done;
         }
     }

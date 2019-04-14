@@ -22,6 +22,7 @@
 #include <openenclave/bits/module.h>
 #include "oe_t.h"
 
+#include "common_macros.h"
 /*
 **==============================================================================
 **
@@ -204,20 +205,14 @@ static int _epoll_close(oe_device_t*);
 static int _epoll_clone(oe_device_t* device, oe_device_t** new_device)
 {
     int ret = -1;
-    epoll_dev_t* epoll = _cast_epoll(device);
+    epoll_dev_t* epoll = NULL;
     epoll_dev_t* new_epoll = NULL;
 
-    if (!epoll || !new_device)
-    {
-        oe_errno = EINVAL;
-        goto done;
-    }
+    epoll = _cast_epoll(device);
+    IF_TRUE_SET_ERRNO_JUMP(!epoll || !new_device, EINVAL, done);
 
-    if (!(new_epoll = oe_calloc(1, sizeof(epoll_dev_t))))
-    {
-        oe_errno = ENOMEM;
-        goto done;
-    }
+    new_epoll = oe_calloc(1, sizeof(epoll_dev_t));
+    IF_TRUE_SET_ERRNO_JUMP(!new_epoll, ENOMEM, done);
 
     memcpy(new_epoll, epoll, sizeof(epoll_dev_t));
 
@@ -231,13 +226,10 @@ done:
 static int _epoll_release(oe_device_t* device)
 {
     int ret = -1;
-    epoll_dev_t* epoll = _cast_epoll(device);
+    epoll_dev_t* epoll = NULL;
 
-    if (!epoll)
-    {
-        oe_errno = EINVAL;
-        goto done;
-    }
+    epoll = _cast_epoll(device);
+    IF_TRUE_SET_ERRNO_JUMP(!epoll, EINVAL, done);
 
     oe_free(epoll);
     ret = 0;
@@ -251,6 +243,7 @@ static oe_device_t* _epoll_create(oe_device_t* epoll_, int size)
     oe_device_t* ret = NULL;
     int retval;
     epoll_dev_t* epoll = NULL;
+    oe_result_t result = OE_FAILURE;
 
     /* ATTN:IO: why is size ignored? */
     (void)size;
@@ -260,9 +253,10 @@ static oe_device_t* _epoll_create(oe_device_t* epoll_, int size)
     (void)_epoll_clone(epoll_, &ret);
     epoll = _cast_epoll(ret);
 
-    if (oe_posix_epoll_create1_ocall(&retval, 0, &oe_errno) != OE_OK)
+    if ((result = oe_posix_epoll_create1_ocall(&retval, 0, &oe_errno)) != OE_OK)
     {
         oe_errno = EINVAL;
+        OE_TRACE_ERROR("%s", oe_result_str(result));
         goto done;
     }
 
@@ -284,15 +278,18 @@ static oe_device_t* _epoll_create1(oe_device_t* epoll_, int32_t flags)
     oe_device_t* ret = NULL;
     epoll_dev_t* epoll = NULL;
     int retval;
+    oe_result_t result = OE_FAILURE;
 
     oe_errno = 0;
 
     (void)_epoll_clone(epoll_, &ret);
     epoll = _cast_epoll(ret);
 
-    if (oe_posix_epoll_create1_ocall(&retval, flags, &oe_errno) != OE_OK)
+    if ((result = oe_posix_epoll_create1_ocall(&retval, flags, &oe_errno)) !=
+        OE_OK)
     {
         oe_errno = EINVAL;
+        OE_TRACE_ERROR("%s", oe_result_str(result));
         goto done;
     }
 
@@ -318,13 +315,11 @@ static int _epoll_ctl_add(
     epoll_dev_t* epoll = _cast_epoll(oe_get_fd_device(epoll_fd));
     ssize_t host_fd = -1;
     oe_device_t* pdev = oe_get_fd_device(enclave_fd);
+    oe_result_t result = OE_FAILURE;
 
     /* Check parameters. */
-    if (!epoll || !pdev || !event || (enclave_fd == -1))
-    {
-        oe_errno = EINVAL;
-        return -1;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(
+        !epoll || !pdev || !event || (enclave_fd == -1), EINVAL, done);
 
     oe_errno = 0;
     if (pdev->ops.base->get_host_fd != NULL)
@@ -344,24 +339,18 @@ static int _epoll_ctl_add(
         .enclave_data = event->data.u64,
     };
 
-    if (add_event_data(epoll, &ev_data, &list_idx) == NULL)
-    {
-        oe_errno = ENOMEM;
-        goto done;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(
+        add_event_data(epoll, &ev_data, &list_idx) == NULL, ENOMEM, done);
 
-    if (oe_posix_epoll_ctl_add_ocall(
-            &ret,
-            (int)epoll->host_fd,
-            (int)host_fd,
-            event->events,
-            list_idx,
-            epoll_fd,
-            &oe_errno) != OE_OK)
-    {
-        oe_errno = ENOMEM;
-        goto done;
-    }
+    result = oe_posix_epoll_ctl_add_ocall(
+        &ret,
+        (int)epoll->host_fd,
+        (int)host_fd,
+        event->events,
+        list_idx,
+        epoll_fd,
+        &oe_errno);
+    IF_TRUE_SET_ERRNO_JUMP(result != OE_OK, ENOMEM, done);
 
 done:
     return ret;
@@ -376,13 +365,10 @@ static int _epoll_ctl_mod(
     epoll_dev_t* epoll = _cast_epoll(oe_get_fd_device(epoll_fd));
     ssize_t host_fd = -1;
     oe_device_t* pdev = oe_get_fd_device(enclave_fd);
+    oe_result_t result = OE_FAILURE;
 
     /* Check parameters. */
-    if (!epoll || !pdev || !event)
-    {
-        oe_errno = EINVAL;
-        return -1;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(!epoll || !pdev || !event, EINVAL, done);
 
     oe_errno = 0;
     if (pdev->ops.base->get_host_fd != NULL)
@@ -400,23 +386,25 @@ static int _epoll_ctl_mod(
         .enclave_fd = enclave_fd,
         .enclave_data = event->data.u64,
     };
+    IF_TRUE_SET_ERRNO_JUMP(
+        (modify_event_data(epoll, &ev_data) == NULL), ENOMEM, done);
 
-    if (modify_event_data(epoll, &ev_data) == NULL)
+    if ((result = oe_posix_epoll_ctl_mod_ocall(
+             &ret,
+             (int)epoll->host_fd,
+             (int)host_fd,
+             event->events,
+             enclave_fd, /* list_idx: ATTN:IO: is this correct? */
+             epoll_fd,
+             &oe_errno)) != OE_OK)
     {
         oe_errno = ENOMEM;
-        goto done;
-    }
-
-    if (oe_posix_epoll_ctl_mod_ocall(
-            &ret,
-            (int)epoll->host_fd,
-            (int)host_fd,
-            event->events,
-            enclave_fd, /* list_idx: ATTN:IO: is this correct? */
-            epoll_fd,
-            &oe_errno) != OE_OK)
-    {
-        oe_errno = ENOMEM;
+        OE_TRACE_ERROR(
+            "epoll->host_fd=%ld host_fd=%ld %s oe_errno =%d ",
+            epoll->host_fd,
+            host_fd,
+            oe_result_str(result),
+            oe_errno);
         goto done;
     }
 
@@ -430,13 +418,10 @@ static int _epoll_ctl_del(int epoll_fd, int enclave_fd)
     epoll_dev_t* epoll = _cast_epoll(oe_get_fd_device(epoll_fd));
     ssize_t host_fd = -1;
     oe_device_t* pdev = oe_get_fd_device(enclave_fd);
+    oe_result_t result = OE_FAILURE;
 
     /* Check parameters. */
-    if (!epoll || !pdev)
-    {
-        oe_errno = EINVAL;
-        return -1;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(!epoll || !pdev, EINVAL, done);
 
     oe_errno = 0;
     if (pdev->ops.base->get_host_fd != NULL)
@@ -450,16 +435,19 @@ static int _epoll_ctl_del(int epoll_fd, int enclave_fd)
         return 0;
     }
 
-    if (delete_event_data(epoll, enclave_fd) == NULL)
-    {
-        oe_errno = EINVAL;
-        return -1;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(
+        delete_event_data(epoll, enclave_fd) == NULL, EINVAL, done);
 
-    if (oe_posix_epoll_ctl_del_ocall(
-            &ret, (int)epoll->host_fd, (int)host_fd, &oe_errno) != OE_OK)
+    if ((result = oe_posix_epoll_ctl_del_ocall(
+             &ret, (int)epoll->host_fd, (int)host_fd, &oe_errno)) != OE_OK)
     {
         oe_errno = ENOMEM;
+        OE_TRACE_ERROR(
+            "epoll->host_fd=%ld host_fd=%ld %s oe_errno =%d ",
+            epoll->host_fd,
+            host_fd,
+            oe_result_str(result),
+            oe_errno);
         goto done;
     }
 
@@ -477,14 +465,10 @@ static int _epoll_wait(
     epoll_dev_t* epoll = _cast_epoll(oe_get_fd_device(epoll_fd));
     ssize_t epoll_host_fd = -1;
     struct oe_epoll_event* host_events = NULL;
+    oe_result_t result = OE_FAILURE;
 
     /* Check parameters. */
-    if (!epoll || !events)
-    {
-        oe_errno = EINVAL;
-        return -1;
-    }
-
+    IF_TRUE_SET_ERRNO_JUMP(!epoll || !events, EINVAL, done);
     oe_errno = 0;
 
     if (epoll->base.ops.base->get_host_fd != NULL)
@@ -499,26 +483,18 @@ static int _epoll_wait(
         return 0;
     }
 
-    if (!(host_events =
-              oe_calloc(1, sizeof(struct oe_epoll_event) * maxevents)))
-    {
-        oe_errno = ENOMEM;
-        goto done;
-    }
+    host_events = oe_calloc(1, sizeof(struct oe_epoll_event) * maxevents);
+    IF_TRUE_SET_ERRNO_JUMP(!host_events, ENOMEM, done);
 
-    if (oe_posix_epoll_wait_ocall(
-            &ret,
-            (int64_t)oe_get_enclave(),
-            (int)epoll_host_fd,
-            (struct epoll_event*)host_events,
-            maxevents,
-            (int)timeout,
-            &oe_errno) != OE_OK)
-    {
-        /* ATTN:IO: host_events is leaked here. */
-        oe_errno = EINVAL;
-        goto done;
-    }
+    result = oe_posix_epoll_wait_ocall(
+        &ret,
+        (int64_t)oe_get_enclave(),
+        (int)epoll_host_fd,
+        (struct epoll_event*)host_events,
+        maxevents,
+        (int)timeout,
+        &oe_errno);
+    IF_TRUE_SET_ERRNO_JUMP(result != OE_OK, EINVAL, done);
 
     if (ret != -1)
     {
@@ -557,11 +533,7 @@ static int _epoll_add_event_data(
     OE_UNUSED(events);
 
     /* Check parameters. */
-    if (!epoll || !pdev || (enclave_fd == -1))
-    {
-        oe_errno = EINVAL;
-        return -1;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(!epoll || !pdev || (enclave_fd == -1), EINVAL, done);
 
     oe_errno = 0;
     int list_idx = -1;
@@ -590,23 +562,17 @@ static int _epoll_poll(
     epoll_dev_t* epoll = _cast_epoll(oe_get_fd_device(epoll_fd));
     oe_device_t* pdev = NULL;
     struct oe_pollfd* host_fds = NULL;
+    oe_result_t result = OE_FAILURE;
 
     /* Check parameters. */
-    if (!epoll || !fds)
-    {
-        oe_errno = EINVAL;
-        return -1;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(!epoll || !fds, EINVAL, done);
 
     oe_errno = 0;
 
     if (nfds > 0)
     {
-        if (!(host_fds = oe_calloc(1, sizeof(struct oe_pollfd) * nfds)))
-        {
-            oe_errno = ENOMEM;
-            goto done;
-        }
+        host_fds = oe_calloc(1, sizeof(struct oe_pollfd) * nfds);
+        IF_TRUE_SET_ERRNO_JUMP(!host_fds, ENOMEM, done);
 
         size_t fd_idx = 0;
         for (; fd_idx < nfds; fd_idx++)
@@ -628,15 +594,22 @@ static int _epoll_poll(
         }
     }
 
-    if (oe_posix_epoll_poll_ocall(
-            &ret,
-            (int64_t)oe_get_enclave(),
-            (int)epoll_fd,
-            (struct pollfd*)host_fds,
-            nfds,
-            (int)timeout,
-            &oe_errno) != OE_OK)
+    result = oe_posix_epoll_poll_ocall(
+        &ret,
+        (int64_t)oe_get_enclave(),
+        (int)epoll_fd,
+        (struct pollfd*)host_fds,
+        nfds,
+        (int)timeout,
+        &oe_errno);
+    if (result != OE_OK)
     {
+        OE_TRACE_ERROR(
+            "epoll_fd=%ld host_fd=%ld %s oe_errno =%d ",
+            epoll_fd,
+            host_fds,
+            oe_result_str(result),
+            oe_errno);
         goto done;
     }
 
@@ -656,11 +629,7 @@ static int _epoll_close(oe_device_t* epoll_)
     oe_errno = 0;
 
     /* Check parameters. */
-    if (!epoll_)
-    {
-        oe_errno = EINVAL;
-        goto done;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(!epoll, EINVAL, done);
 
     if (epoll->pevent_data)
     {
@@ -683,11 +652,7 @@ static int _epoll_shutdown_device(oe_device_t* epoll_)
     oe_errno = 0;
 
     /* Check parameters. */
-    if (!epoll_)
-    {
-        oe_errno = EINVAL;
-        goto done;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(!epoll, EINVAL, done);
 
     /* Release the epoll_ object. */
     oe_free(epoll);
@@ -701,26 +666,15 @@ done:
 static uint64_t _epoll_get_event_data(oe_device_t* epoll_, uint32_t list_idx)
 {
     epoll_dev_t* epoll = _cast_epoll(epoll_);
+    uint64_t ret = (uint64_t)-1;
 
-    if (!epoll_)
-    {
-        oe_errno = EINVAL;
-        return (uint64_t)-1;
-    }
+    IF_TRUE_SET_ERRNO_JUMP(!epoll, EINVAL, done);
+    IF_TRUE_SET_ERRNO_JUMP(list_idx > epoll->num_event_data, EINVAL, done);
+    IF_TRUE_SET_ERRNO_JUMP(!epoll->pevent_data, EINVAL, done);
 
-    if (list_idx > epoll->num_event_data)
-    {
-        oe_errno = EINVAL;
-        return (uint64_t)-1;
-    }
-
-    if (!epoll->pevent_data)
-    {
-        oe_errno = EINVAL;
-        return (uint64_t)-1;
-    }
-
-    return epoll->pevent_data[list_idx].enclave_data;
+    ret = epoll->pevent_data[list_idx].enclave_data;
+done:
+    return ret;
 }
 
 static int _epoll_notify(oe_device_t* epoll_, uint64_t notification_mask)
@@ -796,11 +750,17 @@ oe_result_t oe_load_module_polling(void)
 
             /* Allocate the device id. */
             if (oe_allocate_devid(devid) != devid)
+            {
+                OE_TRACE_ERROR("devid=%d", devid);
                 goto done;
+            }
 
             /* Add to the device table. */
             if (oe_set_devid_device(devid, &_epoll.base) != 0)
+            {
+                OE_TRACE_ERROR("devid=%d", devid);
                 goto done;
+            }
         }
 
         oe_spin_unlock(&_lock);
