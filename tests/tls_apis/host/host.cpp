@@ -78,13 +78,14 @@ int main(int argc, const char* argv[])
 
     fflush(stdout);
 
-#if 0
+#if 1
     {
         // Questions:
         // what is the format of the whole certificate?
         // what's the format of the extension data?
         // output the whole cer in DER format
-        OE_TRACE_INFO("Host: Log quote embedded certificate to file: ./cert.der\n");
+        OE_TRACE_INFO(
+            "Host: Log quote embedded certificate to file: ./cert.der\n");
         FILE* file = fopen("./cert.der", "wb");
         fwrite(cert, 1, cert_size, file);
         fclose(file);

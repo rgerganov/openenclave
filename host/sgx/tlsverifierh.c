@@ -85,7 +85,7 @@ static oe_result_t get_extension(
                 oid_len);
             goto done;
         }
-        OE_TRACE_VERBOSE("buff=[%s]\n", buff);
+        OE_TRACE_VERBOSE("cert extension OID found:[%s]\n", buff);
 
         /* If found matching oid then get the data */
         // if (memcmp(buff, oid, (size_t)bytes_count) == 0)
