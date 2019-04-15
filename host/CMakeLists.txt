@@ -75,13 +75,11 @@ if (OE_SGX)
     sgx/sgxquote.c
     sgx/sgxsign.c
     sgx/sgxtypes.c
-    # __feature_io__: - sgx/tlsverifierh.c
     sgx/traceh.c)
 
   # OS specific as well.
   if (UNIX)
     list(APPEND PLATFORM_SRC
-      sgx/tlsverifierh.c # __feature_io__
       sgx/linux/aep.S
       sgx/linux/aesm.c
       sgx/linux/enter.S

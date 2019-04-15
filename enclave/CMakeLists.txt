@@ -35,8 +35,6 @@ add_library(oeenclave STATIC
     random.c
     rsa.c
     sha.c
-    tls.c
-    tlsverifiere.c
     ${PLATFORM_SRC})
 
 maybe_build_using_clangw(oeenclave)
