@@ -86,6 +86,7 @@ if (OE_SGX)
       sgx/linux/exception.c
       sgx/linux/sgxioctl.c
       sgx/linux/sgxquoteprovider.c
+      sgx/tlsverifierh.c
       sgx/linux/xstate.c)
   else()
     list(APPEND PLATFORM_SRC

@@ -91,6 +91,8 @@ add_subdirectory(libcsock)
 add_subdirectory(polling)
 add_subdirectory(resolver)
 add_subdirectory(create-rapid)
+add_subdirectory(tls_apis)
+add_subdirectory(tls_e2e)
 add_subdirectory(hostfs)        # __feature_io__
 add_subdirectory(fs)            # __feature_io__
 endif()
