@@ -37,7 +37,7 @@ add_library(oeenclave STATIC
     ../common/cert.c
     ../common/kdf.c
     asym_keys.c
-       ${PLATFORM_SRC})
+    ${PLATFORM_SRC})
 
 maybe_build_using_clangw(oecrypto)
 maybe_build_using_clangw(oeenclave)

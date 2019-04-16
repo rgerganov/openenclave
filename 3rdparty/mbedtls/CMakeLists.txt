@@ -58,6 +58,14 @@ ExternalProject_Add(mbedtls-wrap
 ExternalProject_Get_property(mbedtls-wrap SOURCE_DIR)
 ExternalProject_Get_property(mbedtls-wrap BINARY_DIR)
 
+# Add step to weaken symbols.
+ExternalProject_Add_Step(mbedtls-wrap weaken-symbols
+    COMMAND objcopy --weaken <BINARY_DIR>/library/libmbedtls.a
+    COMMAND objcopy --weaken <BINARY_DIR>/library/libmbedx509.a
+    COMMAND objcopy --weaken <BINARY_DIR>/library/libmbedcrypto.a
+    DEPENDEES build
+    DEPENDERS install)
+
 # NOTE: These imported libraries must be specified before `oecore`
 # when linking, hence their dependency on it.
 add_library(mbedtls_imported IMPORTED STATIC)
