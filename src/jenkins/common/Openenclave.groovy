@@ -18,7 +18,7 @@ String dockerImage(String tag, String dockerfile = ".jenkins/Dockerfile", String
 
 def ContainerRun(String imageName, String compiler, String task, String runArgs="") {
     docker.withRegistry("https://oejenkinscidockerregistry.azurecr.io", "oejenkinscidockerregistry") {
-        image = docker.image("${imageName}:latest")
+        image = docker.image("${imageName}:0.7")
         image.pull()
         image.inside(runArgs) {
             dir("${WORKSPACE}/build") {
@@ -49,8 +49,8 @@ def azureEnvironment(String task) {
 }
 
 def Run(String compiler, String task, Integer timeoutMinutes = 30) {
-    def c_compiler = "clang-7"
-    def cpp_compiler = "clang++-7"
+    def c_compiler = "clang-8"
+    def cpp_compiler = "clang++-8"
     if (compiler == "gcc") {
         c_compiler = "gcc"
         cpp_compiler = "g++"
