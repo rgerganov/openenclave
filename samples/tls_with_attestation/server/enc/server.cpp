@@ -31,7 +31,7 @@ extern "C"
 // mbedtls debug levels
 // 0 No debug, 1 Error, 2 State change, 3 Informational, 4 Verbose
 #define DEBUG_LEVEL 1
-#define SERVER_IP "127.0.0.1"
+#define SERVER_IP "0.0.0.0"
 
 #define HTTP_RESPONSE                                    \
     "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\n" \
